@@ -107,33 +107,52 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Show typing indicator
     await update.message.chat.send_action("typing")
     
-    # Categorize with AI
-    result = await categorize_message(text)
-    
-    # Add to Notion
-    notion_id = add_to_life_areas(
-        category=result["category"],
-        title=result["title"],
-        item_type=result["type"],
-        priority=result["priority"],
-        notes=result["summary"]
-    )
-    
-    if notion_id:
-        response = (
-            f"✅ Got it! Added to *{result['category']}*\n\n"
-            f"📌 {result['title']}\n"
-            f"🎯 Priority: {result['priority']}\n"
-        )
-        if result.get("suggested_action"):
-            response += f"\n💡 Suggestion: {result['suggested_action']}"
+    try:
+        # Categorize with AI
+        logger.info("Calling AI categorizer...")
+        result = await categorize_message(text)
+        logger.info(f"AI result: {result}")
         
-        await update.message.reply_text(response, parse_mode="Markdown")
-    else:
-        await update.message.reply_text(
-            "⚠️ Something went wrong. Added to Brain Dump for manual processing."
+        # Add to Notion
+        logger.info(f"Adding to Notion Life Areas: {result['category']}")
+        notion_id = add_to_life_areas(
+            category=result["category"],
+            title=result["title"],
+            item_type=result["type"],
+            priority=result["priority"],
+            notes=result["summary"]
         )
-        add_to_brain_dump(text[:100], text, "Text")
+        logger.info(f"Notion response ID: {notion_id}")
+        
+        if notion_id:
+            response = (
+                f"✅ Got it! Added to *{result['category']}*\n\n"
+                f"📌 {result['title']}\n"
+                f"🎯 Priority: {result['priority']}\n"
+            )
+            if result.get("suggested_action"):
+                response += f"\n💡 Suggestion: {result['suggested_action']}"
+            
+            await update.message.reply_text(response, parse_mode="Markdown")
+        else:
+            logger.error("Notion returned None - adding to Brain Dump")
+            add_to_brain_dump(text[:100], text, "Text")
+            await update.message.reply_text(
+                "⚠️ Something went wrong. Added to Brain Dump for manual processing."
+            )
+    
+    except Exception as e:
+        logger.error(f"Error in handle_text: {e}", exc_info=True)
+        try:
+            add_to_brain_dump(text[:100], text, "Text")
+            await update.message.reply_text(
+                f"⚠️ Error: {str(e)}\nAdded to Brain Dump for manual processing."
+            )
+        except Exception as e2:
+            logger.error(f"Even Brain Dump failed: {e2}", exc_info=True)
+            await update.message.reply_text(
+                f"❌ Critical error: {str(e)}\nPlease check logs."
+            )
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
