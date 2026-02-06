@@ -137,15 +137,15 @@ def setup_notion_workspace():
     # Create databases
     print("Creating Life Areas database...")
     life_areas_id = create_life_areas_database(parent_id)
-    print(f"✓ Life Areas DB created: {life_areas_id}")
+    print(f"[OK] Life Areas DB created: {life_areas_id}")
     
     print("Creating Brain Dump database...")
     brain_dump_id = create_brain_dump_database(parent_id)
-    print(f"✓ Brain Dump DB created: {brain_dump_id}")
+    print(f"[OK] Brain Dump DB created: {brain_dump_id}")
     
     print("Creating Progress Tracker...")
     progress_id = create_progress_tracker(parent_id)
-    print(f"✓ Progress Tracker created: {progress_id}")
+    print(f"[OK] Progress Tracker created: {progress_id}")
     
     print("\n" + "="*50)
     print("Setup complete! Add these to your .env file:")
