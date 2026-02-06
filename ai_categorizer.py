@@ -3,13 +3,13 @@ AI Categorizer using Gemini Flash
 Analyzes messages and categorizes them into life areas
 """
 import os
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from dotenv import load_dotenv
 
 load_dotenv()
 
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-model = genai.GenerativeModel('gemini-2.0-flash-exp')
+client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
 
 CATEGORIZATION_PROMPT = """You are an AI assistant helping someone with ADHD organize their life. 
@@ -69,9 +69,10 @@ async def categorize_message(message_text, has_image=False, has_file=False):
         prompt += "\n\n[Note: This message includes a file/document]"
     
     try:
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.GenerationConfig(
+        response = client.models.generate_content(
+            model='gemini-2.0-flash-exp',
+            contents=prompt,
+            config=types.GenerateContentConfig(
                 temperature=0.3,
                 response_mime_type="application/json"
             )
@@ -118,9 +119,10 @@ async def analyze_image(image_data, caption=""):
     """
     
     try:
-        response = model.generate_content(
-            [prompt, image_data],
-            generation_config=genai.GenerationConfig(
+        response = client.models.generate_content(
+            model='gemini-2.0-flash-exp',
+            contents=[prompt, image_data],
+            config=types.GenerateContentConfig(
                 temperature=0.3,
                 response_mime_type="application/json"
             )
