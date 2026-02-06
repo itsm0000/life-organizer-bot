@@ -70,7 +70,7 @@ async def categorize_message(message_text, has_image=False, has_file=False):
     
     try:
         response = client.models.generate_content(
-            model='gemini-2.0-flash-exp',
+            model='gemini-1.5-flash',
             contents=prompt,
             config=types.GenerateContentConfig(
                 temperature=0.3,
@@ -120,7 +120,7 @@ async def analyze_image(image_data, caption=""):
     
     try:
         response = client.models.generate_content(
-            model='gemini-2.0-flash-exp',
+            model='gemini-1.5-flash',
             contents=[prompt, image_data],
             config=types.GenerateContentConfig(
                 temperature=0.3,
