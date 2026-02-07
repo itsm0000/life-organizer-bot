@@ -103,11 +103,11 @@ def get_active_items():
 
 
 def search_items(query: str):
-    """Search Life Areas for items matching the query"""
+    """Search Life Areas for items matching the query - tries multiple strategies"""
     db_id = os.getenv("LIFE_AREAS_DB_ID")
     
     try:
-        # Search by title contains
+        # Strategy 1: Direct search with full query
         results = notion.databases.query(
             database_id=db_id,
             filter={
@@ -115,7 +115,49 @@ def search_items(query: str):
                 "title": {"contains": query}
             }
         )
-        return results["results"]
+        
+        if results["results"]:
+            print(f"Search found {len(results['results'])} items with full query: '{query}'")
+            return results["results"]
+        
+        # Strategy 2: Try first significant word (skip common words)
+        skip_words = {"the", "a", "an", "my", "to", "change", "update", "set", "make", "mark", "delete", "remove"}
+        words = [w for w in query.lower().split() if w not in skip_words and len(w) > 2]
+        
+        if words:
+            first_word = words[0]
+            results = notion.databases.query(
+                database_id=db_id,
+                filter={
+                    "property": "Name",
+                    "title": {"contains": first_word}
+                }
+            )
+            
+            if results["results"]:
+                print(f"Search found {len(results['results'])} items with word: '{first_word}'")
+                return results["results"]
+        
+        # Strategy 3: Get all active items and do local fuzzy matching
+        all_items = notion.databases.query(
+            database_id=db_id,
+            filter={"property": "Status", "select": {"equals": "Active"}}
+        )
+        
+        # Local fuzzy match
+        query_lower = query.lower()
+        matched = []
+        for item in all_items.get("results", []):
+            title = item["properties"].get("Name", {}).get("title", [{}])
+            if title:
+                title_text = title[0].get("text", {}).get("content", "").lower()
+                # Check if any query word is in the title
+                if any(word in title_text for word in query_lower.split() if len(word) > 2):
+                    matched.append(item)
+        
+        print(f"Local fuzzy search found {len(matched)} items for: '{query}'")
+        return matched
+        
     except Exception as e:
         print(f"Error searching items: {e}")
         return []
