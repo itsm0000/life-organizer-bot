@@ -77,10 +77,22 @@ python bot.py
 
 1. Create a Railway account at railway.app
 2. Connect your GitHub repository
-3. Add environment variables in Railway dashboard
-4. Deploy!
+3. Add environment variables in Railway dashboard:
+   - `TELEGRAM_BOT_TOKEN`
+   - `NOTION_TOKEN`
+   - `GOOGLE_API_KEY`
+   - `LIFE_AREAS_DB_ID`
+   - `BRAIN_DUMP_DB_ID`
+   - `PROGRESS_DB_ID`
+4. **Generate a public domain**:
+   - Go to Settings → Networking → Generate Domain
+   - Copy the domain (e.g., `life-organizer-bot-production.up.railway.app`)
+5. **Add the domain as an environment variable**:
+   - Name: `RAILWAY_PUBLIC_DOMAIN`
+   - Value: `your-app-name.up.railway.app` (without `https://`)
+6. Deploy! The bot will automatically use webhook mode.
 
-Railway free tier gives you $5/month credit, which is more than enough for this bot.
+**Note**: Railway's free tier gives you $5/month credit, which is more than enough for this bot.
 
 ## Bot Commands
 

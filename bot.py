@@ -267,7 +267,27 @@ def main():
     
     # Start the Bot
     logger.info("Starting Life Organizer Bot...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    
+    # Check if we're running on Railway (webhook mode) or locally (polling mode)
+    railway_domain = os.getenv("RAILWAY_PUBLIC_DOMAIN")
+    port = int(os.getenv("PORT", 8443))
+    
+    if railway_domain:
+        # Production: Use webhook mode for Railway
+        webhook_url = f"https://{railway_domain}"
+        logger.info(f"Running in WEBHOOK mode on port {port}")
+        logger.info(f"Webhook URL: {webhook_url}")
+        
+        application.run_webhook(
+            listen="0.0.0.0",
+            port=port,
+            webhook_url=webhook_url,
+            allowed_updates=Update.ALL_TYPES,
+        )
+    else:
+        # Local development: Use polling mode
+        logger.info("Running in POLLING mode (local development)")
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == "__main__":
