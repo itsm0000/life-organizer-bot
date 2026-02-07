@@ -345,6 +345,62 @@ async def weekly_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+# =============================================================================
+# CATEGORY QUICK COMMANDS (Phase 4)
+# =============================================================================
+CATEGORY_ICONS = {
+    "Health": "🏃",
+    "Study": "📚",
+    "Work": "💼",
+    "Ideas": "💡",
+    "Shopping": "🛒",
+    "Skills": "🎯",
+    "Finance": "💰",
+    "Social": "👥",
+}
+
+
+async def category_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, category: str):
+    """Generic handler for category commands."""
+    items = get_items_by_category(category)
+    icon = CATEGORY_ICONS.get(category, "📂")
+    
+    if not items:
+        await update.message.reply_text(f"{icon} No active items in *{category}*", parse_mode="Markdown")
+        return
+    
+    response = f"{icon} *{category}* ({len(items)} items)\n\n"
+    for item in items[:10]:
+        props = item.get("properties", {})
+        title = props.get("Name", {}).get("title", [{}])[0].get("plain_text", "Untitled")
+        priority = props.get("Priority", {}).get("select", {}).get("name", "Low")
+        p_icon = {"High": "🔴", "Medium": "🟡", "Low": "🟢"}.get(priority, "⚪")
+        response += f"{p_icon} {title}\n"
+    
+    await update.message.reply_text(response, parse_mode="Markdown")
+
+
+@secure
+async def health_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await category_command_handler(update, context, "Health")
+
+@secure
+async def study_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await category_command_handler(update, context, "Study")
+
+@secure
+async def work_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await category_command_handler(update, context, "Work")
+
+@secure
+async def ideas_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await category_command_handler(update, context, "Ideas")
+
+@secure
+async def shopping_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await category_command_handler(update, context, "Shopping")
+
+
 @secure
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle text messages - both new items and task management"""
@@ -856,6 +912,44 @@ focus_handler = ConversationHandler(
 )
 
 
+# =============================================================================
+# SMART NUDGES: Daily Reminder for Stale Tasks (Phase 4)
+# =============================================================================
+async def daily_nudge_callback(context: ContextTypes.DEFAULT_TYPE):
+    """Send daily reminder about high-priority tasks."""
+    # Get all whitelisted users
+    if not ALLOWED_USER_IDS:
+        return  # No whitelisted users
+    
+    items = get_active_items()
+    high_priority = [
+        item for item in items
+        if item.get("properties", {}).get("Priority", {}).get("select", {}).get("name") == "High"
+    ]
+    
+    if not high_priority:
+        return  # No high priority tasks
+    
+    # Pick a random one to nudge about
+    import random
+    task = random.choice(high_priority)
+    title = task.get("properties", {}).get("Name", {}).get("title", [{}])[0].get("plain_text", "a task")
+    
+    message = (
+        f"👋 *Morning Nudge*\n\n"
+        f"You have {len(high_priority)} high-priority tasks.\n\n"
+        f"🔴 *{title}* is waiting for you!\n\n"
+        f"Use /focus to crush it today 💪"
+    )
+    
+    # Send to all whitelisted users
+    for user_id in ALLOWED_USER_IDS:
+        try:
+            await context.bot.send_message(chat_id=user_id, text=message, parse_mode="Markdown")
+        except Exception as e:
+            logger.error(f"Failed to send nudge to {user_id}: {e}")
+
+
 def main():
     """Start the bot"""
     # Create the Application
@@ -868,6 +962,13 @@ def main():
     application.add_handler(CommandHandler("stats", stats_command))
     application.add_handler(CommandHandler("weekly", weekly_command))
     
+    # Category quick commands
+    application.add_handler(CommandHandler("health", health_command))
+    application.add_handler(CommandHandler("study", study_command))
+    application.add_handler(CommandHandler("work", work_command))
+    application.add_handler(CommandHandler("ideas", ideas_command))
+    application.add_handler(CommandHandler("shopping", shopping_command))
+    
     # Focus Mode (must be before generic text handler)
     application.add_handler(focus_handler)
     
@@ -875,6 +976,18 @@ def main():
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     application.add_handler(MessageHandler(filters.VOICE, handle_voice))
+    
+    # Schedule daily nudge at 10:00 AM (user's local time)
+    job_queue = application.job_queue
+    if job_queue:
+        from datetime import time as dt_time
+        # Schedule for 10:00 AM daily (adjust timezone as needed)
+        job_queue.run_daily(
+            daily_nudge_callback,
+            time=dt_time(hour=10, minute=0),
+            name="daily_nudge"
+        )
+        logger.info("Scheduled daily nudge for 10:00 AM")
     
     # Start the Bot
     logger.info("Starting Life Organizer Bot...")
