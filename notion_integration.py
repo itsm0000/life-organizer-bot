@@ -97,12 +97,16 @@ def get_active_items():
     try:
         logger.info(f"Querying Notion DB {db_id} for ALL items (no filter)...")
         # Query without filter to ensure we see everything
-        results = notion.databases.query(
-            database_id=db_id,
-            sorts=[{"property": "Priority", "direction": "ascending"}]
+        # WORKAROUND: databases.query() is missing in some environments, using raw request
+        response = notion.request(
+            path=f"databases/{db_id}/query",
+            method="POST",
+            body={
+                "sorts": [{"property": "Priority", "direction": "ascending"}]
+            }
         )
         
-        items = results.get("results", [])
+        items = response.get("results", [])
         logger.info(f"Notion returned {len(items)} items raw.")
         
         active_items = []
@@ -142,17 +146,22 @@ def search_items(query: str):
     
     try:
         # Strategy 1: Direct search with full query
-        results = notion.databases.query(
-            database_id=db_id,
-            filter={
-                "property": "Name",
-                "title": {"contains": query}
+        # WORKAROUND: databases.query() is missing, using raw request
+        response = notion.request(
+            path=f"databases/{db_id}/query",
+            method="POST",
+            body={
+                "filter": {
+                    "property": "Name",
+                    "title": {"contains": query}
+                }
             }
         )
         
-        if results["results"]:
-            print(f"Search found {len(results['results'])} items with full query: '{query}'")
-            return results["results"]
+        items = response.get("results", [])
+        if items:
+            print(f"Search found {len(items)} items with full query: '{query}'")
+            return items
         
         # Strategy 2: Try first significant word (skip common words)
         skip_words = {"the", "a", "an", "my", "to", "change", "update", "set", "make", "mark", "delete", "remove"}
@@ -160,23 +169,32 @@ def search_items(query: str):
         
         if words:
             first_word = words[0]
-            results = notion.databases.query(
-                database_id=db_id,
-                filter={
-                    "property": "Name",
-                    "title": {"contains": first_word}
+            # Use raw request here too
+            response = notion.request(
+                path=f"databases/{db_id}/query",
+                method="POST",
+                body={
+                    "filter": {
+                        "property": "Name",
+                        "title": {"contains": first_word}
+                    }
                 }
             )
             
-            if results["results"]:
-                print(f"Search found {len(results['results'])} items with word: '{first_word}'")
-                return results["results"]
+            if response.get("results"):
+                print(f"Search found {len(response['results'])} items with word: '{first_word}'")
+                return response["results"]
         
         # Strategy 3: Get all active items and do local fuzzy matching
-        all_items = notion.databases.query(
-            database_id=db_id,
-            filter={"property": "Status", "select": {"equals": "Active"}}
+        # Use raw request here too
+        response = notion.request(
+            path=f"databases/{db_id}/query",
+            method="POST",
+            body={
+                 "filter": {"property": "Status", "select": {"equals": "Active"}}
+            }
         )
+        all_items = response
         
         # Local fuzzy match
         query_lower = query.lower()
@@ -202,17 +220,21 @@ def get_items_by_category(category: str):
     db_id = os.getenv("LIFE_AREAS_DB_ID")
     
     try:
-        results = notion.databases.query(
-            database_id=db_id,
-            filter={
-                "and": [
-                    {"property": "Category", "select": {"equals": category}},
-                    {"property": "Status", "select": {"equals": "Active"}}
-                ]
-            },
-            sorts=[{"property": "Priority", "direction": "ascending"}]
+        # WORKAROUND: databases.query() is missing, using raw request
+        response = notion.request(
+            path=f"databases/{db_id}/query",
+            method="POST",
+            body={
+                "filter": {
+                    "and": [
+                        {"property": "Category", "select": {"equals": category}},
+                        {"property": "Status", "select": {"equals": "Active"}}
+                    ]
+                },
+                "sorts": [{"property": "Priority", "direction": "ascending"}]
+            }
         )
-        return results["results"]
+        return response.get("results", [])
     except Exception as e:
         print(f"Error getting items by category: {e}")
         return []

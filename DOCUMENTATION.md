@@ -300,20 +300,19 @@ if intent.get("intent") != "none":
 
 ---
 
-### Obstacle 13: Task Search Not Finding Items (CURRENT)
-**Problem:** When user says "change skincare routine priority to low", the bot can't find "Skincare Routine" even though it exists.
+### Obstacle 13: Task Search Not Finding Items (FIXED)
+**Problem:** `notion-client` threw `AttributeError: 'DatabasesEndpoint' object has no attribute 'query'` when trying to search.
+**Root Cause:** In the installed environment (v2.7.0 and v2.2.1), the `query` method was inexplicably missing from `notion.databases`, despite being in the official documentation.
+**Solution:** Replaced all `notion.databases.query(...)` calls with the raw API request method:
+```python
+notion.request(path=f"databases/{db_id}/query", method="POST", body={...})
+```
+**Effective:** ✅ Yes - validated with `inspect_notion.py` script.
 
-**Attempted Solutions:**
-1. **Notion contains filter** - Failed: case sensitivity or API issue
-2. **Multi-strategy text search** - Failed: tried full query, first word, fuzzy match
-3. **AI-powered semantic matching** - Partially working but still failing
-
-**Current Status:** 🔄 Still debugging. The `get_active_items()` function may not be returning all items, or the AI matching isn't receiving the correct data.
-
-**Proposed Fix:** Need to verify that:
-1. `get_active_items()` is actually returning items
-2. Items have Status="Active" set
-3. AI receives the full list of items
+### Obstacle 14: Restrictive Status Filtering
+**Problem:** "Skincare Routine" wasn't found because it wasn't strictly "Active" or the filter was too rigid.
+**Solution:** Removed the API-level `Status="Active"` filter. Now fetching ALL items and filtering in Python with robust logging.
+**Effective:** ✅ Yes
 
 ---
 
