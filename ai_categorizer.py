@@ -1,15 +1,16 @@
 """
-AI Categorizer using Gemini Flash
-Analyzes messages and categorizes them into life areas
+AI Categorizer using Groq (Llama 3)
+Free and fast AI categorization for life organization
 """
 import os
-from google import genai
-from google.genai import types
+import json
+import httpx
 from dotenv import load_dotenv
 
 load_dotenv()
 
-client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 
 CATEGORIZATION_PROMPT = """You are an AI assistant helping someone with ADHD organize their life. 
@@ -35,7 +36,7 @@ Priority (based on urgency/importance):
 - Medium: personal projects, skill development
 - Low: ideas, shopping, exploration
 
-Respond in JSON format:
+Respond ONLY with valid JSON, no other text:
 {
   "category": "category_name",
   "type": "type_name",
@@ -43,15 +44,12 @@ Respond in JSON format:
   "title": "short title (max 50 chars)",
   "summary": "brief summary of the content",
   "suggested_action": "what the user should do with this (optional)"
-}
-
-Message to analyze:
-"""
+}"""
 
 
 async def categorize_message(message_text, has_image=False, has_file=False):
     """
-    Categorize a message using Gemini Flash
+    Categorize a message using Groq's Llama 3
     
     Args:
         message_text: The text content
@@ -61,26 +59,40 @@ async def categorize_message(message_text, has_image=False, has_file=False):
     Returns:
         dict: Categorization results
     """
-    prompt = CATEGORIZATION_PROMPT + f"\n{message_text}"
+    user_message = message_text
     
     if has_image:
-        prompt += "\n\n[Note: This message includes an image]"
+        user_message += "\n\n[Note: This message includes an image]"
     if has_file:
-        prompt += "\n\n[Note: This message includes a file/document]"
+        user_message += "\n\n[Note: This message includes a file/document]"
     
     try:
-        response = client.models.generate_content(
-            model='gemini-2.0-flash-lite',
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.3,
-                response_mime_type="application/json"
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                GROQ_API_URL,
+                headers={
+                    "Authorization": f"Bearer {GROQ_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "llama-3.1-70b-versatile",
+                    "messages": [
+                        {"role": "system", "content": CATEGORIZATION_PROMPT},
+                        {"role": "user", "content": user_message}
+                    ],
+                    "temperature": 0.3,
+                    "max_tokens": 500
+                },
+                timeout=30.0
             )
-        )
-        
-        import json
-        result = json.loads(response.text)
-        return result
+            
+            response.raise_for_status()
+            data = response.json()
+            content = data["choices"][0]["message"]["content"]
+            
+            # Parse JSON from response
+            result = json.loads(content)
+            return result
     
     except Exception as e:
         print(f"Error in categorization: {e}")
@@ -97,44 +109,27 @@ async def categorize_message(message_text, has_image=False, has_file=False):
 
 async def analyze_image(image_data, caption=""):
     """
-    Analyze an image using Gemini Vision
+    Analyze an image - placeholder for future implementation
+    Note: Groq doesn't support vision yet, so we use caption-based categorization
     
     Args:
         image_data: Image bytes or PIL Image
         caption: Optional text caption
     
     Returns:
-        str: Description of the image and suggested category
+        dict: Analysis results
     """
-    prompt = f"""Analyze this image and determine what it's about.
-    
-    Caption (if provided): {caption}
-    
-    Respond in JSON format:
-    {{
-      "description": "what's in the image",
-      "category": "Health/Study/Personal Projects/Skills/Creative/Shopping/Ideas",
-      "suggested_title": "short title for this item"
-    }}
-    """
-    
-    try:
-        response = client.models.generate_content(
-            model='gemini-2.0-flash-lite',
-            contents=[prompt, image_data],
-            config=types.GenerateContentConfig(
-                temperature=0.3,
-                response_mime_type="application/json"
-            )
-        )
-        
-        import json
-        return json.loads(response.text)
-    
-    except Exception as e:
-        print(f"Error analyzing image: {e}")
+    # For now, just categorize based on caption
+    if caption:
+        result = await categorize_message(f"Image with caption: {caption}", has_image=True)
         return {
-            "description": "Image analysis failed",
-            "category": "Ideas",
-            "suggested_title": caption[:50] if caption else "Image"
+            "description": caption,
+            "category": result["category"],
+            "suggested_title": result["title"]
         }
+    
+    return {
+        "description": "Image without caption",
+        "category": "Ideas",
+        "suggested_title": "Image"
+    }
