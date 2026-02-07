@@ -543,9 +543,11 @@ for page in doc:
 3. Voice file must be under 25MB
 
 ### Task management not finding items?
-1. Check if items have Status="Active" in Notion
+1. Check if items have Status="Active" in Notion (Bot now searches ALL non-archived items)
 2. Run `/active` command to see what bot can see
-3. Check Railway logs for search results
+3. Check Railway logs for search results (Enhanced logging added v1.1.1)
+   - Look for "Item found:" logs to see what Notion returned
+   - Look for "Returning X active items" to see what survived filtering
 
 ---
 

@@ -86,19 +86,53 @@ def log_progress(activity, category, duration=None, notes=""):
         return None
 
 
+# Configure logging
+import logging
+logger = logging.getLogger(__name__)
+
 def get_active_items():
-    """Get all active items from Life Areas"""
+    """Get all non-archived items from Life Areas (fetches all, filters in memory)"""
     db_id = os.getenv("LIFE_AREAS_DB_ID")
     
     try:
+        logger.info(f"Querying Notion DB {db_id} for ALL items (no filter)...")
+        # Query without filter to ensure we see everything
         results = notion.databases.query(
             database_id=db_id,
-            filter={"property": "Status", "select": {"equals": "Active"}},
             sorts=[{"property": "Priority", "direction": "ascending"}]
         )
-        return results["results"]
+        
+        items = results.get("results", [])
+        logger.info(f"Notion returned {len(items)} items raw.")
+        
+        active_items = []
+        for item in items:
+            props = item["properties"]
+            
+            # Extract basic info for logging
+            title = "Untitled"
+            if props.get("Name", {}).get("title"):
+                title = props["Name"]["title"][0].get("text", {}).get("content", "Untitled")
+            
+            status = props.get("Status", {}).get("select", {})
+            status_name = status.get("name", "No Status") if status else "No Status"
+            
+            category = props.get("Category", {}).get("select", {})
+            category_name = category.get("name", "No Category") if category else "No Category"
+            
+            # Log every item seen
+            logger.info(f"Item found: '{title}' | Status: '{status_name}' | Category: '{category_name}'")
+            
+            # In-memory filter: Keep everything that isn't explicitly "Done" or "Archived"
+            # This is safer than filtering for "Active" which might be case-sensitive or misspelled
+            if status_name.lower() not in ["done", "completed", "archived"]:
+                active_items.append(item)
+        
+        logger.info(f"Returning {len(active_items)} active items after local filtering.")
+        return active_items
+        
     except Exception as e:
-        print(f"Error getting active items: {e}")
+        logger.error(f"Error getting active items: {e}", exc_info=True)
         return []
 
 
