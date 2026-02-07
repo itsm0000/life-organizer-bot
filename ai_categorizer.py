@@ -256,6 +256,25 @@ Respond in JSON format:
             data = response.json()
             content = data["choices"][0]["message"]["content"]
             
+            # Strip markdown code blocks if present
+            content = content.strip()
+            if content.startswith("```"):
+                # Remove opening code fence
+                lines = content.split("\n")
+                if lines[0].startswith("```"):
+                    lines = lines[1:]  # Remove first line
+                if lines[-1].strip() == "```":
+                    lines = lines[:-1]  # Remove last line
+                content = "\n".join(lines)
+            
+            # Also try to find JSON object in the text
+            if not content.startswith("{"):
+                # Look for JSON object in the response
+                import re
+                json_match = re.search(r'\{[^{}]*\}', content, re.DOTALL)
+                if json_match:
+                    content = json_match.group()
+            
             # Parse JSON from response
             result = json.loads(content)
             return result
