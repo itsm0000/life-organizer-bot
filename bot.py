@@ -98,6 +98,77 @@ def secure(func):
     """Combined decorator: authorized + rate limited."""
     return authorized_only(rate_limited(func))
 
+
+# =============================================================================
+# GAMIFICATION: XP, Levels & Streaks (Phase 4)
+# =============================================================================
+from datetime import datetime, timedelta
+
+# In-memory XP storage (persists via Notion Progress DB for durability)
+_user_xp = defaultdict(lambda: {"xp": 0, "last_action": None, "streak": 0})
+
+# XP rewards
+XP_TASK_ADDED = 5
+XP_TASK_COMPLETED = 15
+XP_VOICE_NOTE = 3
+XP_FOCUS_COMPLETED = 25  # Bonus for using focus mode
+
+# Level thresholds
+LEVELS = [
+    (0, "🌱 Seedling"),
+    (50, "🌿 Sprout"),
+    (150, "🌳 Sapling"),
+    (350, "🌲 Tree"),
+    (600, "🏔️ Mountain"),
+    (1000, "⭐ Star"),
+    (2000, "🌟 Superstar"),
+    (5000, "🚀 Legend"),
+]
+
+
+def get_level(xp: int) -> tuple[int, str]:
+    """Get level number and title for given XP."""
+    level = 0
+    title = LEVELS[0][1]
+    for i, (threshold, name) in enumerate(LEVELS):
+        if xp >= threshold:
+            level = i + 1
+            title = name
+    return level, title
+
+
+def add_xp(user_id: int, amount: int, reason: str = "") -> dict:
+    """Add XP and update streak. Returns updated stats."""
+    user = _user_xp[user_id]
+    today = datetime.now().date()
+    
+    # Check streak
+    if user["last_action"]:
+        last_date = user["last_action"]
+        if isinstance(last_date, str):
+            last_date = datetime.fromisoformat(last_date).date()
+        
+        days_diff = (today - last_date).days
+        if days_diff == 1:
+            user["streak"] += 1
+        elif days_diff > 1:
+            user["streak"] = 1  # Reset streak
+        # Same day = streak stays the same
+    else:
+        user["streak"] = 1
+    
+    user["last_action"] = today.isoformat()
+    user["xp"] += amount
+    
+    # Streak bonus (every 7 days = +50 XP)
+    if user["streak"] > 0 and user["streak"] % 7 == 0:
+        user["xp"] += 50
+        logger.info(f"User {user_id} got 7-day streak bonus! +50 XP")
+    
+    logger.info(f"User {user_id}: +{amount} XP ({reason}). Total: {user['xp']}")
+    return user
+
+
 # Enable logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -139,6 +210,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "*Commands:*\n"
         "/start - Introduction\n"
         "/active - See active items\n"
+        "/focus - 🎯 Focus on ONE task\n"
+        "/stats - 📊 Your XP & level\n"
+        "/weekly - 📅 Weekly review\n"
         "/help - This message",
         parse_mode="Markdown"
     )
@@ -174,6 +248,101 @@ async def active_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message += f"*{category}:*\n" + "\n".join(items_list) + "\n\n"
     
     await update.message.reply_text(message, parse_mode="Markdown")
+
+
+@secure
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show user's XP, level, and streak."""
+    user_id = update.effective_user.id
+    user_data = _user_xp[user_id]
+    
+    xp = user_data["xp"]
+    streak = user_data["streak"]
+    level, title = get_level(xp)
+    
+    # Find next level threshold
+    next_threshold = None
+    for threshold, _ in LEVELS:
+        if threshold > xp:
+            next_threshold = threshold
+            break
+    
+    # Progress bar to next level
+    if next_threshold:
+        prev_threshold = LEVELS[level - 1][0] if level > 0 else 0
+        progress = (xp - prev_threshold) / (next_threshold - prev_threshold)
+        bar_filled = int(progress * 10)
+        progress_bar = "█" * bar_filled + "░" * (10 - bar_filled)
+        progress_text = f"{progress_bar} {xp}/{next_threshold} XP"
+    else:
+        progress_text = "🏆 MAX LEVEL!"
+    
+    # Streak emoji
+    if streak >= 7:
+        streak_emoji = "🔥🔥🔥"
+    elif streak >= 3:
+        streak_emoji = "🔥🔥"
+    elif streak >= 1:
+        streak_emoji = "🔥"
+    else:
+        streak_emoji = "💤"
+    
+    await update.message.reply_text(
+        f"📊 *Your Stats*\n\n"
+        f"*Level {level}*: {title}\n"
+        f"{progress_text}\n\n"
+        f"*Streak*: {streak} days {streak_emoji}\n\n"
+        f"_Keep adding and completing tasks to level up!_",
+        parse_mode="Markdown"
+    )
+
+
+@secure
+async def weekly_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show weekly progress summary."""
+    user_id = update.effective_user.id
+    
+    await update.message.reply_text("📅 Generating your weekly review...")
+    
+    # Get all items
+    items = get_active_items()
+    
+    # Count by status (we can only see Active items, need to query differently for Done)
+    # For now, show active items count and XP progress
+    active_count = len(items)
+    
+    # Count by category
+    by_category = defaultdict(int)
+    high_priority_count = 0
+    for item in items:
+        props = item.get("properties", {})
+        cat = props.get("Category", {}).get("select", {}).get("name", "Other")
+        by_category[cat] += 1
+        if props.get("Priority", {}).get("select", {}).get("name") == "High":
+            high_priority_count += 1
+    
+    # Get user stats
+    user_data = _user_xp[user_id]
+    xp = user_data["xp"]
+    streak = user_data["streak"]
+    level, title = get_level(xp)
+    
+    # Build categories list
+    cat_lines = "\n".join([f"  • {cat}: {count}" for cat, count in sorted(by_category.items())])
+    
+    await update.message.reply_text(
+        f"📅 *Weekly Review*\n\n"
+        f"*Active Tasks:* {active_count}\n"
+        f"🔴 High Priority: {high_priority_count}\n\n"
+        f"*By Category:*\n{cat_lines}\n\n"
+        f"──────────────\n"
+        f"*Your Progress:*\n"
+        f"Level {level}: {title}\n"
+        f"🔥 {streak} day streak\n"
+        f"⭐ {xp} XP total\n\n"
+        f"_Use /focus to tackle your top task!_",
+        parse_mode="Markdown"
+    )
 
 
 @secure
@@ -237,6 +406,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 response += f"\n💡 Suggestion: {result['suggested_action']}"
             
             await update.message.reply_text(response, parse_mode="Markdown")
+            
+            # Award XP for adding a task
+            add_xp(user_id, XP_TASK_ADDED, "added task")
         else:
             logger.error("Notion returned None - adding to Brain Dump")
             add_to_brain_dump(text[:100], text, "Text")
@@ -635,9 +807,15 @@ async def focus_complete(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if session:
             # Mark task as done in Notion
             update_item(session["page_id"], {"status": "Done"})
+            
+            # Award XP for completing task via Focus Mode (bonus!)
+            stats = add_xp(user_id, XP_FOCUS_COMPLETED, "focus mode completion")
+            level, title = get_level(stats["xp"])
+            
             await update.message.reply_text(
                 f"🎉 *AMAZING!*\n\n"
                 f"You crushed it! ✅ *{session['task']}* is DONE!\n\n"
+                f"+{XP_FOCUS_COMPLETED} XP 💫 (Level {level}: {title})\n\n"
                 f"Take a breather, then /focus on the next one.",
                 parse_mode="Markdown"
             )
@@ -687,6 +865,8 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("active", active_command))
+    application.add_handler(CommandHandler("stats", stats_command))
+    application.add_handler(CommandHandler("weekly", weekly_command))
     
     # Focus Mode (must be before generic text handler)
     application.add_handler(focus_handler)
