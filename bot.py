@@ -16,9 +16,15 @@ from dotenv import load_dotenv
 import asyncio
 
 # Import our modules
-from ai_categorizer import categorize_message, analyze_image
-from notion_integration import add_to_life_areas, add_to_brain_dump, log_progress, get_active_items
+from ai_categorizer import categorize_message, analyze_image, parse_management_intent
+from notion_integration import (
+    add_to_life_areas, add_to_brain_dump, log_progress, get_active_items,
+    search_items, update_item, delete_item, get_items_by_category, format_item_for_display
+)
 from voice_transcriber import transcribe_voice
+
+# Store pending delete confirmations {user_id: page_id}
+pending_deletes = {}
 
 # Load environment variables
 load_dotenv()
@@ -99,17 +105,40 @@ async def active_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle text messages"""
+    """Handle text messages - both new items and task management"""
     text = update.message.text
     user = update.effective_user
+    user_id = user.id
     
     logger.info(f"Received text from {user.first_name}: {text[:50]}...")
     
     # Show typing indicator
     await update.message.chat.send_action("typing")
     
+    # Check for delete confirmation
+    if user_id in pending_deletes and text.upper() in ["YES", "نعم", "اي"]:
+        page_id = pending_deletes.pop(user_id)
+        if delete_item(page_id):
+            await update.message.reply_text("✅ Deleted successfully!")
+        else:
+            await update.message.reply_text("❌ Failed to delete. Try again.")
+        return
+    elif user_id in pending_deletes:
+        pending_deletes.pop(user_id)
+        await update.message.reply_text("❌ Delete cancelled.")
+        return
+    
     try:
-        # Categorize with AI
+        # First, check if this is a management command
+        logger.info("Checking for management intent...")
+        intent = await parse_management_intent(text)
+        logger.info(f"Management intent: {intent}")
+        
+        if intent.get("intent") != "none":
+            await handle_management_command(update, intent, user_id)
+            return
+        
+        # Not a management command - categorize and add as new item
         logger.info("Calling AI categorizer...")
         result = await categorize_message(text)
         logger.info(f"AI result: {result}")
@@ -154,6 +183,86 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 f"❌ Critical error: {str(e)}\nPlease check logs."
             )
+
+
+async def handle_management_command(update: Update, intent: dict, user_id: int):
+    """Handle task management commands (delete, update, query)"""
+    action = intent.get("intent")
+    target = intent.get("target", "")
+    category = intent.get("category")
+    new_priority = intent.get("new_priority")
+    
+    if action == "query":
+        # List items in category or all active items
+        if category:
+            items = get_items_by_category(category)
+            if not items:
+                await update.message.reply_text(f"No active items in {category}.")
+                return
+            
+            response = f"📋 *{category}* ({len(items)} items):\n\n"
+            for item in items[:15]:
+                response += format_item_for_display(item) + "\n"
+            await update.message.reply_text(response, parse_mode="Markdown")
+        else:
+            items = get_active_items()
+            if not items:
+                await update.message.reply_text("No active items yet!")
+                return
+            
+            response = f"📋 *Active Items* ({len(items)}):\n\n"
+            for item in items[:15]:
+                response += format_item_for_display(item) + "\n"
+            await update.message.reply_text(response, parse_mode="Markdown")
+        return
+    
+    # For delete, complete, update - need to search for the item
+    if not target:
+        await update.message.reply_text("❓ Which item? Please be more specific.")
+        return
+    
+    items = search_items(target)
+    
+    if not items:
+        await update.message.reply_text(f"🔍 Couldn't find any item matching '{target}'.")
+        return
+    
+    if len(items) > 1:
+        # Multiple matches - show options
+        response = f"🔍 Found {len(items)} items matching '{target}':\n\n"
+        for i, item in enumerate(items[:5], 1):
+            response += f"{i}. {format_item_for_display(item)}\n"
+        response += "\nPlease be more specific."
+        await update.message.reply_text(response)
+        return
+    
+    # Single match found
+    item = items[0]
+    page_id = item["id"]
+    title = item["properties"].get("Name", {}).get("title", [{}])[0].get("text", {}).get("content", "Untitled")
+    
+    if action == "delete":
+        # Ask for confirmation
+        pending_deletes[user_id] = page_id
+        await update.message.reply_text(
+            f"⚠️ Delete *{title}*?\n\nReply YES to confirm, anything else to cancel.",
+            parse_mode="Markdown"
+        )
+    
+    elif action == "complete":
+        if update_item(page_id, {"status": "Done"}):
+            await update.message.reply_text(f"✅ Marked *{title}* as Done!", parse_mode="Markdown")
+        else:
+            await update.message.reply_text("❌ Failed to update. Try again.")
+    
+    elif action == "update_priority":
+        if new_priority and update_item(page_id, {"priority": new_priority}):
+            await update.message.reply_text(
+                f"✅ Updated *{title}* → Priority: {new_priority}",
+                parse_mode="Markdown"
+            )
+        else:
+            await update.message.reply_text("❌ Failed to update priority. Try again.")
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):

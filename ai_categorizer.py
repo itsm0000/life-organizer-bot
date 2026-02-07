@@ -47,6 +47,74 @@ Respond ONLY with valid JSON, no other text:
 }"""
 
 
+MANAGEMENT_PROMPT = """You are an AI assistant. Determine if the user wants to manage existing tasks/items.
+
+Management actions:
+- delete: remove an item ("delete the skincare task", "remove gym")
+- update_priority: change priority ("make Java high priority", "set vitamins to low")
+- complete: mark as done ("mark gym as done", "finished the exam prep")
+- query: list/show items ("what tasks in Health?", "show my shopping list")
+- none: not a management command - user wants to ADD something new
+
+Respond ONLY with valid JSON:
+{
+  "intent": "delete" | "update_priority" | "complete" | "query" | "none",
+  "target": "search term to find the item (extract key words)",
+  "category": "category name if querying by category, else null",
+  "new_priority": "High" | "Medium" | "Low" (only for update_priority, else null)
+}"""
+
+
+async def parse_management_intent(message_text: str) -> dict:
+    """
+    Determine if user wants to manage existing tasks
+    Returns intent type and target item
+    """
+    if not GROQ_API_KEY:
+        return {"intent": "none"}
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                GROQ_API_URL,
+                headers={
+                    "Authorization": f"Bearer {GROQ_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [
+                        {"role": "system", "content": MANAGEMENT_PROMPT},
+                        {"role": "user", "content": message_text}
+                    ],
+                    "temperature": 0.1,  # Low temp for consistent parsing
+                    "max_tokens": 200
+                },
+                timeout=30.0
+            )
+            
+            if response.status_code != 200:
+                print(f"Management parse error: {response.status_code}")
+                return {"intent": "none"}
+            
+            data = response.json()
+            content = data["choices"][0]["message"]["content"]
+            
+            # Strip markdown if present
+            content = content.strip()
+            if content.startswith("```"):
+                lines = content.split("\n")
+                lines = lines[1:-1] if lines[-1].strip() == "```" else lines[1:]
+                content = "\n".join(lines)
+            
+            result = json.loads(content)
+            return result
+            
+    except Exception as e:
+        print(f"Management parse error: {e}")
+        return {"intent": "none"}
+
+
 async def categorize_message(message_text, has_image=False, has_file=False):
     """
     Categorize a message using Groq's Llama 3

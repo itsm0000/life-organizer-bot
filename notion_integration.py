@@ -100,3 +100,101 @@ def get_active_items():
     except Exception as e:
         print(f"Error getting active items: {e}")
         return []
+
+
+def search_items(query: str):
+    """Search Life Areas for items matching the query"""
+    db_id = os.getenv("LIFE_AREAS_DB_ID")
+    
+    try:
+        # Search by title contains
+        results = notion.databases.query(
+            database_id=db_id,
+            filter={
+                "property": "Name",
+                "title": {"contains": query}
+            }
+        )
+        return results["results"]
+    except Exception as e:
+        print(f"Error searching items: {e}")
+        return []
+
+
+def get_items_by_category(category: str):
+    """Get all items in a specific category"""
+    db_id = os.getenv("LIFE_AREAS_DB_ID")
+    
+    try:
+        results = notion.databases.query(
+            database_id=db_id,
+            filter={
+                "and": [
+                    {"property": "Category", "select": {"equals": category}},
+                    {"property": "Status", "select": {"equals": "Active"}}
+                ]
+            },
+            sorts=[{"property": "Priority", "direction": "ascending"}]
+        )
+        return results["results"]
+    except Exception as e:
+        print(f"Error getting items by category: {e}")
+        return []
+
+
+def update_item(page_id: str, updates: dict):
+    """
+    Update an item's properties
+    
+    updates can contain:
+    - priority: "High" | "Medium" | "Low"
+    - status: "Active" | "Done" | "Archived"
+    - category: category name
+    """
+    properties = {}
+    
+    if "priority" in updates:
+        properties["Priority"] = {"select": {"name": updates["priority"]}}
+    
+    if "status" in updates:
+        properties["Status"] = {"select": {"name": updates["status"]}}
+    
+    if "category" in updates:
+        properties["Category"] = {"select": {"name": updates["category"]}}
+    
+    try:
+        page = notion.pages.update(page_id=page_id, properties=properties)
+        return page["id"]
+    except Exception as e:
+        print(f"Error updating item: {e}")
+        return None
+
+
+def delete_item(page_id: str):
+    """Archive/delete an item (Notion doesn't truly delete, it archives)"""
+    try:
+        notion.pages.update(page_id=page_id, archived=True)
+        return True
+    except Exception as e:
+        print(f"Error deleting item: {e}")
+        return False
+
+
+def format_item_for_display(item: dict) -> str:
+    """Format a Notion page for display in Telegram"""
+    props = item["properties"]
+    
+    # Get title
+    title = "Untitled"
+    if props.get("Name", {}).get("title"):
+        title = props["Name"]["title"][0]["text"]["content"]
+    
+    # Get priority emoji
+    priority = props.get("Priority", {}).get("select", {}).get("name", "Low")
+    priority_emoji = {"High": "🔴", "Medium": "🟡", "Low": "🟢"}.get(priority, "⚪")
+    
+    # Get category
+    category = props.get("Category", {}).get("select", {}).get("name", "Unknown")
+    
+    return f"{priority_emoji} {title} ({category})"
+
