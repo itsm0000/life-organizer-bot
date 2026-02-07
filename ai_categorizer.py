@@ -134,6 +134,7 @@ async def analyze_image(image_bytes: bytes, caption: str = "") -> dict:
         dict: Analysis results with description, category, and title
     """
     import base64
+    from io import BytesIO
     
     if not GROQ_API_KEY:
         print("ERROR: GROQ_API_KEY is not set!")
@@ -145,8 +146,39 @@ async def analyze_image(image_bytes: bytes, caption: str = "") -> dict:
             "suggested_action": "Review manually"
         }
     
-    # Encode image as base64
-    image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+    # Compress image to stay under Groq's 4MB base64 limit
+    try:
+        from PIL import Image
+        
+        # Open image
+        img = Image.open(BytesIO(image_bytes))
+        print(f"Original image: {img.size}, mode: {img.mode}")
+        
+        # Convert to RGB if necessary (PNG with alpha, etc)
+        if img.mode in ('RGBA', 'P', 'LA'):
+            img = img.convert('RGB')
+        
+        # Resize if too large (max 1024 on longest side for Groq)
+        max_size = 1024
+        if max(img.size) > max_size:
+            ratio = max_size / max(img.size)
+            new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
+            img = img.resize(new_size, Image.LANCZOS)
+            print(f"Resized image to {new_size}")
+        
+        # Compress to JPEG
+        buffer = BytesIO()
+        img.save(buffer, format='JPEG', quality=80)
+        compressed_bytes = buffer.getvalue()
+        
+        print(f"Compressed: {len(image_bytes)} -> {len(compressed_bytes)} bytes")
+        image_base64 = base64.b64encode(compressed_bytes).decode("utf-8")
+        
+    except Exception as e:
+        print(f"Image compression failed: {e}")
+        image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+    
+    print(f"Base64 size: {len(image_base64)} chars (~{len(image_base64) / 1024 / 1024:.2f}MB)")
     
     # Build prompt for vision model
     vision_prompt = """Analyze this image and provide:
