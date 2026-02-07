@@ -5,10 +5,12 @@
 - [Features](#features)
 - [Architecture](#architecture)
 - [Build Journey & Obstacles](#build-journey--obstacles)
+- [Task Management Feature (NEW)](#task-management-feature-new)
 - [Setup Guide](#setup-guide)
 - [Environment Variables](#environment-variables)
 - [Future Improvements](#future-improvements)
 - [Troubleshooting](#troubleshooting)
+- [Version History](#version-history)
 
 ---
 
@@ -38,10 +40,11 @@ This bot removes all friction: just dump your thoughts via Telegram, and AI hand
 |---------|--------|-------------|
 | Text Messages | ✅ Working | AI-categorized and stored in Notion Life Areas |
 | Arabic Support | ✅ Working | Full Arabic language understanding |
-| Photo Messages | ✅ Working | Analyzed with Llama 4 Scout Vision AI (sees what's in the image!) |
+| Photo Messages | ✅ Working | Analyzed with Llama 4 Scout Vision AI |
 | Documents/PDFs | ✅ Working | Saved to Brain Dump for review |
 | Voice Notes | ✅ Working | Transcribed with Groq Whisper, then AI-categorized |
 | AI Suggestions | ✅ Working | Contextual action suggestions for each item |
+| Task Management | 🔄 In Progress | Modify/delete existing tasks via chat |
 
 ### Message Types
 
@@ -60,9 +63,10 @@ This bot removes all friction: just dump your thoughts via Telegram, and AI hand
 
 #### Voice Notes
 - **Transcription**: Groq Whisper converts speech to text
-- Text is then passed to AI categorizer
+- Text is then passed through management intent detection
+- If user is modifying a task, it handles that
+- Otherwise categorizes as new item
 - Supports Arabic and English voice messages
-- Transcribed content stored in notes
 
 #### Documents/PDFs
 - Saved to Brain Dump database for manual review
@@ -83,12 +87,6 @@ This bot removes all friction: just dump your thoughts via Telegram, and AI hand
 - **Medium**: personal projects, skill development, regular tasks (🟡)
 - **Low**: ideas, shopping, exploration, nice-to-have (🟢)
 
-### Item Types
-- **Task**: Actionable items with deadlines
-- **Goal**: Long-term objectives
-- **Reference**: Information to remember
-- **Resource**: Files, images, documents
-
 ---
 
 ## Architecture
@@ -102,7 +100,6 @@ This bot removes all friction: just dump your thoughts via Telegram, and AI hand
                                  ▼
                         ┌─────────────────┐
                         │   Groq API      │
-                        │   (AI/LLM)      │
                         │   - Llama 3.3   │
                         │   - Llama 4     │
                         │   - Whisper     │
@@ -118,15 +115,16 @@ This bot removes all friction: just dump your thoughts via Telegram, and AI hand
 | Text AI | Groq (Llama 3.3 70B) | Message categorization |
 | Vision AI | Groq (Llama 4 Scout 17B) | Image analysis |
 | Speech-to-Text | Groq (Whisper Large V3 Turbo) | Voice transcription |
+| Task Matching | Groq (Llama 3.3 70B) | Semantic task matching |
 | Storage | Notion API | Database for organized items |
 
 ### File Structure
 ```
 life-organizer-bot/
 ├── bot.py                  # Main bot - handles Telegram messages
-├── ai_categorizer.py       # Groq integration for AI categorization + vision
+├── ai_categorizer.py       # AI: categorization, vision, intent parsing, task matching
 ├── voice_transcriber.py    # Groq Whisper for voice transcription
-├── notion_integration.py   # Notion API handlers
+├── notion_integration.py   # Notion API: CRUD operations
 ├── setup_notion.py         # Database property setup script
 ├── clear_webhook.py        # Utility to clear Telegram webhooks
 ├── requirements.txt        # Python dependencies
@@ -137,27 +135,14 @@ life-organizer-bot/
 └── README.md               # Quick start guide
 ```
 
-### Dependencies (requirements.txt)
-```
-python-telegram-bot[webhooks]>=20.7
-notion-client>=2.2.1
-python-dotenv>=1.0.0
-Pillow>=10.4.0
-requests>=2.31.0
-httpx>=0.25.0
-```
-
 ---
 
 ## Build Journey & Obstacles
 
-This project was built on **February 6-7, 2026** with significant debugging along the way. Here's the complete journey with all obstacles encountered and their solutions:
+This project was built on **February 6-7, 2026** with significant debugging. Here's every obstacle we encountered:
 
 ### Obstacle 1: Railway Deployment - Polling Mode Failure
-**Problem:** The bot used `run_polling()` which works locally but fails on Railway because:
-- Railway expects apps to listen on a PORT
-- Polling connections are unstable on cloud platforms
-- Railway may sleep idle containers
+**Problem:** The bot used `run_polling()` which works locally but fails on Railway.
 
 **Error:** `telegram.error.Conflict: terminated by other getUpdates request`
 
@@ -166,10 +151,9 @@ This project was built on **February 6-7, 2026** with significant debugging alon
 if os.getenv("RAILWAY_PUBLIC_DOMAIN"):
     application.run_webhook(listen="0.0.0.0", port=PORT, webhook_url=URL)
 else:
-    application.run_polling()  # Local dev fallback
+    application.run_polling()
 ```
-
-**Effective:** ✅ Yes - Bot now works perfectly on Railway
+**Effective:** ✅ Yes
 
 ---
 
@@ -182,7 +166,6 @@ else:
 ```
 python-telegram-bot[webhooks]>=20.7
 ```
-
 **Effective:** ✅ Yes
 
 ---
@@ -192,12 +175,9 @@ python-telegram-bot[webhooks]>=20.7
 
 **Error:** `429 RESOURCE_EXHAUSTED - You exceeded your current quota`
 
-**Solution:** Switched from Gemini to **Groq** which offers:
-- Completely free API
-- 30 requests per minute
-- Llama 3.3 70B model (excellent for categorization)
+**Solution:** Switched to **Groq** - completely free with 30 requests/minute.
 
-**Effective:** ✅ Yes - Groq free tier has been more than sufficient
+**Effective:** ✅ Yes
 
 ---
 
@@ -206,10 +186,7 @@ python-telegram-bot[webhooks]>=20.7
 
 **Error:** `The model llama-3.1-70b-versatile has been decommissioned`
 
-**Solution:** Updated to latest model:
-```python
-"model": "llama-3.3-70b-versatile"  # Current supported version
-```
+**Solution:** Updated to `llama-3.3-70b-versatile`
 
 **Effective:** ✅ Yes
 
@@ -224,8 +201,6 @@ https://www.notion.so/DATABASE_ID?v=VIEW_ID
                       ↑ Need this    ↑ Not this!
 ```
 
-**Error:** `404 Not Found - Could not find database with ID`
-
 **Solution:** Extracted correct IDs from before the `?v=` parameter.
 
 **Effective:** ✅ Yes
@@ -237,10 +212,7 @@ https://www.notion.so/DATABASE_ID?v=VIEW_ID
 
 **Error:** `401 Unauthorized - API token is invalid`
 
-**Solution:** 
-1. Created new integration in correct workspace
-2. Updated NOTION_TOKEN in Railway
-3. Connected integration to all databases
+**Solution:** Created new integration, updated NOTION_TOKEN, connected to all databases.
 
 **Effective:** ✅ Yes
 
@@ -251,17 +223,14 @@ https://www.notion.so/DATABASE_ID?v=VIEW_ID
 
 **Error:** `400 Bad Request - Category is not a property that exists`
 
-**Solution:** Created `setup_notion.py` script that adds all required properties:
-- Life Areas: Name, Category, Type, Status, Priority, Date Added, Notes, Image
-- Brain Dump: Name, Content, Processed, Date, Type, Files
-- Progress Log: Name, Category, Date, Duration, Notes
+**Solution:** Created `setup_notion.py` script that adds all required properties.
 
 **Effective:** ✅ Yes
 
 ---
 
 ### Obstacle 8: Notion Workspace Confusion
-**Problem:** Integration was showing as connected but API said "not found". 
+**Problem:** Integration showed as connected but API said "not found".
 
 **Root Cause:** "Mo's Notion" (workspace) vs "Mo's Notion HQ" (page name) confusion.
 
@@ -271,63 +240,118 @@ https://www.notion.so/DATABASE_ID?v=VIEW_ID
 
 ---
 
-### Obstacle 9: Groq Vision Model Size Limit (NEW)
-**Problem:** Groq has a 4MB limit for base64-encoded images. Telegram photos often exceeded this.
+### Obstacle 9: Groq Vision Model Size Limit
+**Problem:** Groq has a 4MB limit for base64-encoded images.
 
 **Error:** `400 Bad Request - Request too large`
 
-**Solution:** Added image compression using PIL:
-```python
-from PIL import Image
-# Resize to max 1024px
-# Compress to JPEG quality 80%
-# Reduces 600KB+ images to ~150KB
-```
+**Solution:** Added PIL image compression (resize to max 1024px, JPEG quality 80%).
 
-**Effective:** ✅ Yes - All images now process successfully
+**Effective:** ✅ Yes
 
 ---
 
-### Obstacle 10: Groq Vision Models Decommissioned (NEW)
+### Obstacle 10: Groq Vision Models Decommissioned
 **Problem:** On April 14, 2025, Groq deprecated all Llama 3.2 Vision models.
 
-**Error:** `The model llama-3.2-11b-vision-preview has been decommissioned and is no longer supported`
+**Error:** `The model llama-3.2-11b-vision-preview has been decommissioned`
 
-**Attempted Solutions:**
-1. First tried `llama-3.2-90b-vision-preview` - ❌ Also decommissioned
-2. Then tried `llama-3.2-11b-vision-preview` - ❌ Also decommissioned
+**Attempted:**
+1. `llama-3.2-90b-vision-preview` - ❌ Also decommissioned
+2. `llama-3.2-11b-vision-preview` - ❌ Also decommissioned
 
-**Final Solution:** Switched to Llama 4 Scout (the official replacement):
-```python
-"model": "meta-llama/llama-4-scout-17b-16e-instruct"
-```
+**Final Solution:** Switched to `meta-llama/llama-4-scout-17b-16e-instruct`
 
-**Effective:** ✅ Yes - Vision now works perfectly with Llama 4 Scout
+**Effective:** ✅ Yes
 
 ---
 
-### Obstacle 11: Vision Response JSON Parsing (NEW)
+### Obstacle 11: Vision Response JSON Parsing
 **Problem:** Llama 4 Scout returns JSON wrapped in markdown code blocks.
 
-**Error:** `json.JSONDecodeError` - couldn't parse response
-
-**Response looked like:**
-```
-Here is the analysis:
-\`\`\`json
-{"description": "...", "category": "..."}
-\`\`\`
-```
+**Error:** `json.JSONDecodeError`
 
 **Solution:** Added code to strip markdown fences and extract JSON:
 ```python
 if content.startswith("```"):
     lines = content.split("\n")
-    lines = lines[1:-1]  # Remove fence lines
+    lines = lines[1:-1]
     content = "\n".join(lines)
 ```
 
-**Effective:** ✅ Yes - Vision responses now parse correctly
+**Effective:** ✅ Yes
+
+---
+
+### Obstacle 12: Voice Notes Not Detecting Management Commands
+**Problem:** Voice notes were always creating new tasks, never updating existing ones.
+
+**Root Cause:** `handle_voice()` was directly categorizing transcribed text without checking for management intent first.
+
+**Solution:** Added management intent check after transcription in `handle_voice()`:
+```python
+intent = await parse_management_intent(transcription)
+if intent.get("intent") != "none":
+    await handle_management_command(update, intent, user.id)
+    return
+```
+
+**Effective:** ✅ Yes (intent detection works)
+
+---
+
+### Obstacle 13: Task Search Not Finding Items (CURRENT)
+**Problem:** When user says "change skincare routine priority to low", the bot can't find "Skincare Routine" even though it exists.
+
+**Attempted Solutions:**
+1. **Notion contains filter** - Failed: case sensitivity or API issue
+2. **Multi-strategy text search** - Failed: tried full query, first word, fuzzy match
+3. **AI-powered semantic matching** - Partially working but still failing
+
+**Current Status:** 🔄 Still debugging. The `get_active_items()` function may not be returning all items, or the AI matching isn't receiving the correct data.
+
+**Proposed Fix:** Need to verify that:
+1. `get_active_items()` is actually returning items
+2. Items have Status="Active" set
+3. AI receives the full list of items
+
+---
+
+## Task Management Feature (NEW)
+
+### Overview
+This feature allows users to modify existing Notion entries via natural language in Telegram.
+
+### Supported Commands
+
+| Command Type | Example | Status |
+|--------------|---------|--------|
+| Query | "What tasks do I have?" | ✅ Working |
+| Query Category | "Show my Health items" | ✅ Working |
+| Update Priority | "Make Java high priority" | 🔄 In Progress |
+| Mark Complete | "Mark gym as done" | 🔄 In Progress |
+| Delete | "Delete the skincare task" | 🔄 In Progress |
+
+### How It Works
+
+1. **Intent Detection**: AI determines if message is add/modify command
+   - Function: `parse_management_intent()` in `ai_categorizer.py`
+   - Returns: `{intent, target, category, new_priority}`
+
+2. **Task Matching**: AI finds which task user is referring to
+   - Function: `ai_match_task()` in `ai_categorizer.py`
+   - Sends list of all active tasks to LLM
+   - LLM picks the best semantic match
+
+3. **Action Execution**: Bot performs the action
+   - Functions in `notion_integration.py`: `update_item()`, `delete_item()`
+   - Delete requires confirmation (user must reply "YES")
+
+### Known Issues
+
+**Issue: Task not found even when it exists**
+- Root cause: Possibly filter on Status="Active" not matching items
+- Items might have different Status values or none at all
 
 ---
 
@@ -413,30 +437,81 @@ python bot.py
 
 ## Future Improvements
 
-### Task Management via Chat (NEXT UP!)
+### 1. Fix Task Search (HIGH PRIORITY)
+**Problem:** AI can't find tasks when user wants to modify them.
+**Proposed Solution:**
+- Remove Status="Active" filter from `get_active_items()` temporarily
+- Add logging to see what items are being returned
+- Verify all items have consistent Status values
+**Implementation:** Modify `notion_integration.py` line 94-98
+
+---
+
+### 2. PDF Text Extraction
 **Status:** Planned
-**Benefit:** Say "delete the skincare task" or "change priority of Java study to high" and bot will update/delete Notion entries
-
-### PDF Text Extraction
-**Status:** Planned  
-**Technology:** PyMuPDF library  
+**Technology:** PyMuPDF library
 **Benefit:** Extract text from PDFs for AI analysis
+**Implementation:**
+```python
+# In bot.py handle_document()
+import fitz  # PyMuPDF
+doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+text = ""
+for page in doc:
+    text += page.get_text()
+# Then categorize the extracted text
+```
 
-### Weekly Summary Reports
-**Status:** Planned  
-**Benefit:** Automated summary of what you worked on
+---
 
-### Progress Analytics
-**Status:** Planned  
+### 3. Weekly Summary Reports
+**Status:** Planned
+**Benefit:** "What did I accomplish this week?"
+**Implementation:**
+- Add `/weekly` command
+- Query Notion for items from last 7 days
+- Use AI to summarize accomplishments
+- Send as formatted Telegram message
+
+---
+
+### 4. Progress Analytics
+**Status:** Planned
 **Benefit:** Charts showing time spent per category
+**Implementation:**
+- Use `matplotlib` to generate charts
+- Track when items are completed
+- Send chart as image to Telegram
 
-### Custom Categories
-**Status:** Planned  
-**Benefit:** User-defined categories beyond defaults
+---
 
-### Reminders for High-Priority Items
+### 5. Custom Categories
+**Status:** Planned
+**Benefit:** Let users add their own categories
+**Implementation:**
+- Store user preferences in a JSON file or Notion page
+- Update AI prompt with user's custom categories
+- Persist across sessions
+
+---
+
+### 6. Reminders for High-Priority Items
+**Status:** Planned
+**Benefit:** "You have 3 High priority items pending!"
+**Implementation:**
+- Use `python-telegram-bot` JobQueue for scheduling
+- Check for High priority items every morning
+- Send Telegram notification
+
+---
+
+### 7. Multi-User Support
 **Status:** Planned  
-**Benefit:** Telegram reminders for urgent items
+**Benefit:** Multiple users can each have their own Notion workspace
+**Implementation:**
+- Store user_id → notion_token mapping
+- Each user runs `/setup` to link their Notion
+- Isolate databases per user
 
 ---
 
@@ -467,17 +542,17 @@ python bot.py
 2. Check Whisper model: `whisper-large-v3-turbo`
 3. Voice file must be under 25MB
 
-### Items not appearing in Notion?
-1. Run `python setup_notion.py` to add properties
-2. Check database has required columns
-3. Verify integration has write access
+### Task management not finding items?
+1. Check if items have Status="Active" in Notion
+2. Run `/active` command to see what bot can see
+3. Check Railway logs for search results
 
 ---
 
 ## Version History
 
 ### v1.0.0 (February 7, 2026)
-**Initial Stable Release**
+**Initial Stable Release - Git Tag: `v1.0.0-stable`**
 
 Features:
 - ✅ Text message categorization (Llama 3.3 70B)
@@ -485,10 +560,24 @@ Features:
 - ✅ Voice note transcription (Whisper Large V3 Turbo)
 - ✅ Document/PDF storage to Brain Dump
 - ✅ Full Arabic language support
-- ✅ Notion integration with 3 databases
+- ✅ Notion 3-database integration
 - ✅ Railway webhook deployment
 
-Git tag: `v1.0.0-stable`
+---
+
+### v1.1.0-wip (February 7, 2026)
+**Task Management - Work in Progress - Git Tag: `v1.1.0-task-management-wip`**
+
+Added:
+- Task management via chat (query, delete, update, complete)
+- AI-powered intent detection
+- AI-powered semantic task matching
+- Voice notes support management commands
+- Multi-strategy task search
+
+Known Issues:
+- Task search not reliably finding items
+- May need to debug Status filter or item properties
 
 ---
 
@@ -509,4 +598,4 @@ MIT License - Use freely!
 
 ---
 
-*Last updated: February 7, 2026 - v1.0.0*
+*Last updated: February 7, 2026 - v1.1.0-wip*
