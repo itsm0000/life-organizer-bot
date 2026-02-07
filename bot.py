@@ -389,7 +389,19 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         logger.info(f"Transcription: {transcription[:100]}...")
         
-        # Now categorize the transcribed text
+        # First check if this is a management command
+        logger.info("Checking for management intent in voice...")
+        intent = await parse_management_intent(transcription)
+        logger.info(f"Voice management intent: {intent}")
+        
+        if intent.get("intent") != "none":
+            # Handle as management command
+            await handle_management_command(update, intent, user.id)
+            # Also show what was transcribed
+            await update.message.reply_text(f"🎤 \"{transcription}\"")
+            return
+        
+        # Not a management command - categorize as new item
         logger.info("Calling AI categorizer...")
         result = await categorize_message(transcription)
         logger.info(f"AI result: {result}")
