@@ -36,6 +36,8 @@ This bot removes all friction: just dump your thoughts via Telegram, and AI hand
 
 ## Features
 
+### Core Features
+
 | Feature | Status | Description |
 |---------|--------|-------------|
 | Text Messages | ✅ Working | AI-categorized and stored in Notion Life Areas |
@@ -44,7 +46,118 @@ This bot removes all friction: just dump your thoughts via Telegram, and AI hand
 | Documents/PDFs | ✅ Working | Saved to Brain Dump for review |
 | Voice Notes | ✅ Working | Transcribed with Groq Whisper, then AI-categorized |
 | AI Suggestions | ✅ Working | Contextual action suggestions for each item |
-| Task Management | 🔄 In Progress | Modify/delete existing tasks via chat |
+| Task Management | ✅ Working | Modify/delete existing tasks via chat |
+
+### v2.0 Features (Added February 2026)
+
+| Feature | Command | Description |
+|---------|---------|-------------|
+| 🛡️ Security | - | User whitelist + Rate limiting |
+| 🧘 Focus Mode | `/focus` | ADHD-friendly single-task mode |
+| 📊 XP/Levels | `/stats` | Gamification with streak tracking |
+| 📅 Weekly Review | `/weekly` | Progress summary + category breakdown |
+| 🏃 Category Views | `/health`, `/study`, etc. | Quick access to specific categories |
+| 👋 Smart Nudges | Auto (10 AM) | Daily reminder about high-priority tasks |
+
+---
+
+## Commands Reference
+
+| Command | Description |
+|---------|-------------|
+| `/start` | Introduction and welcome message |
+| `/help` | List of all commands |
+| `/active` | View all active tasks |
+| `/focus` | Enter Focus Mode - pick ONE task to work on |
+| `/stats` | View your XP, level, and daily streak |
+| `/weekly` | Weekly progress review |
+| `/health` | 🏃 View Health category tasks |
+| `/study` | 📚 View Study category tasks |
+| `/work` | 💼 View Work category tasks |
+| `/ideas` | 💡 View Ideas |
+| `/shopping` | 🛒 View Shopping list |
+
+---
+
+## Security Features
+
+### User Whitelist
+Only whitelisted Telegram users can interact with the bot.
+
+**Configuration:**
+```env
+ALLOWED_USER_IDS=123456789,987654321
+```
+
+- Comma-separated list of Telegram user IDs
+- If empty, bot is open to everyone (not recommended)
+- Unauthorized users are silently ignored
+
+### Rate Limiting
+Prevents spam and abuse.
+
+- **Limit:** 20 requests per minute per user
+- **Response:** "⏳ Too many requests. Please wait a moment."
+
+---
+
+## Gamification System
+
+### XP Rewards
+
+| Action | XP Earned |
+|--------|-----------|
+| Add a task | +5 XP |
+| Complete via Focus Mode | +25 XP |
+| 7-day streak bonus | +50 XP |
+
+### Levels
+
+| Level | Title | XP Required |
+|-------|-------|-------------|
+| 1 | 🌱 Seedling | 0 |
+| 2 | 🌿 Sprout | 50 |
+| 3 | 🌳 Sapling | 150 |
+| 4 | 🌲 Tree | 350 |
+| 5 | 🏔️ Mountain | 600 |
+| 6 | ⭐ Star | 1000 |
+| 7 | 🌟 Superstar | 2000 |
+| 8 | 🚀 Legend | 5000 |
+
+### Streaks
+- Daily streak increments when you use the bot on consecutive days
+- Streak resets if you miss a day
+- 7-day streak bonus: +50 XP
+
+---
+
+## Focus Mode
+
+ADHD-friendly feature to help concentrate on one task at a time.
+
+### How it works:
+1. Send `/focus`
+2. Bot shows top 5 high/medium priority tasks
+3. Tap to select ONE task
+4. Bot enters Focus Mode - reminds you to stay on task
+5. Say "done" (or "تم" in Arabic) when finished
+6. Task is marked complete in Notion + you earn +25 XP
+
+### Focus Mode Keywords:
+- English: `done`, `finished`, `complete`
+- Arabic: `تم`, `خلص`
+- Cancel: `/cancel`
+
+---
+
+## Smart Nudges
+
+Automatic daily reminder about your high-priority tasks.
+
+- **Time:** 10:00 AM (server time)
+- **Recipients:** All whitelisted users
+- **Content:** Highlights a random high-priority task
+- **Purpose:** Gentle reminder to stay productive
 
 ### Message Types
 
@@ -587,6 +700,35 @@ Added:
 Known Issues:
 - Task search not reliably finding items
 - May need to debug Status filter or item properties
+
+---
+
+### v2.0.0 (February 8, 2026)
+**Major Update - Branch: `refactor/v2` | Tag: `v1.1.0-stable` (rollback point)**
+
+Security:
+- User whitelist (`ALLOWED_USER_IDS`)
+- Rate limiting (20 req/min)
+- Silent ignore for unauthorized users
+
+ADHD Features:
+- Focus Mode (`/focus`) - Single-task concentration mode
+- Smart Nudges - Daily 10 AM reminder for high-priority tasks
+
+Gamification:
+- XP system (+5 add, +25 complete, +50 streak bonus)
+- 8 levels: Seedling → Legend
+- Daily streak tracking
+- `/stats` command with progress bar
+
+New Commands:
+- `/stats` - XP, level, streak
+- `/weekly` - Weekly progress review
+- `/focus` - Focus Mode
+- `/health`, `/study`, `/work`, `/ideas`, `/shopping` - Category quick views
+
+Dependencies:
+- Added `python-telegram-bot[job-queue]` for scheduled reminders
 
 ---
 
