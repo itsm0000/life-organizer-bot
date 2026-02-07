@@ -87,7 +87,7 @@ async def categorize_message(message_text, has_image=False, has_file=False):
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "llama-3.1-70b-versatile",
+                    "model": "llama-3.3-70b-versatile",
                     "messages": [
                         {"role": "system", "content": CATEGORIZATION_PROMPT},
                         {"role": "user", "content": user_message}
