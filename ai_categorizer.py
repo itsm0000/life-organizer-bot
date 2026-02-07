@@ -66,6 +66,18 @@ async def categorize_message(message_text, has_image=False, has_file=False):
     if has_file:
         user_message += "\n\n[Note: This message includes a file/document]"
     
+    # Check if API key is set
+    if not GROQ_API_KEY:
+        print("ERROR: GROQ_API_KEY is not set!")
+        return {
+            "category": "Ideas",
+            "type": "Idea",
+            "priority": "Low",
+            "title": message_text[:50],
+            "summary": message_text,
+            "suggested_action": "GROQ_API_KEY not configured - review manually"
+        }
+    
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -85,6 +97,9 @@ async def categorize_message(message_text, has_image=False, has_file=False):
                 },
                 timeout=30.0
             )
+            
+            if response.status_code != 200:
+                print(f"Groq API error: {response.status_code} - {response.text}")
             
             response.raise_for_status()
             data = response.json()
