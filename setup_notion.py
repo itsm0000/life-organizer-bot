@@ -81,7 +81,8 @@ life_areas_properties = {
         }
     },
     "Date Added": {"date": {}},
-    "Notes": {"rich_text": {}}
+    "Notes": {"rich_text": {}},
+    "Image": {"files": {}}
 }
 
 # Brain Dump Database Properties
@@ -98,7 +99,8 @@ brain_dump_properties = {
                 {"name": "Voice", "color": "purple"}
             ]
         }
-    }
+    },
+    "Files": {"files": {}}
 }
 
 # Progress Log Database Properties  
