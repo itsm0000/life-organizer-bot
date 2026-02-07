@@ -40,7 +40,7 @@ This bot removes all friction: just dump your thoughts via Telegram, and AI hand
 | Arabic Support | ✅ Working | Full Arabic language understanding |
 | Photo Messages | ✅ Working | Stored with caption-based categorization |
 | Documents/PDFs | ✅ Working | Saved to Brain Dump for review |
-| Voice Notes | ⚠️ Partial | Saved to Brain Dump (transcription planned) |
+| Voice Notes | ✅ Working | Transcribed with Groq Whisper, then categorized |
 | AI Suggestions | ✅ Working | Contextual action suggestions |
 
 ### Categories
