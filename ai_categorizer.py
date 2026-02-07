@@ -115,6 +115,88 @@ async def parse_management_intent(message_text: str) -> dict:
         return {"intent": "none"}
 
 
+async def ai_match_task(user_request: str, tasks: list) -> dict:
+    """
+    Use AI to semantically match user's request to the best task from the list.
+    Returns the matched task or None if no match found.
+    """
+    if not GROQ_API_KEY or not tasks:
+        return None
+    
+    # Build a list of tasks with indices for AI to pick from
+    task_list = ""
+    task_map = {}
+    for i, task in enumerate(tasks):
+        props = task.get("properties", {})
+        title = "Untitled"
+        if props.get("Name", {}).get("title"):
+            title = props["Name"]["title"][0].get("text", {}).get("content", "Untitled")
+        category = props.get("Category", {}).get("select", {}).get("name", "Unknown")
+        priority = props.get("Priority", {}).get("select", {}).get("name", "Medium")
+        
+        task_list += f"{i+1}. {title} (Category: {category}, Priority: {priority})\n"
+        task_map[i+1] = task
+    
+    prompt = f"""The user wants to manage a task. Here are their available tasks:
+
+{task_list}
+
+User's request: "{user_request}"
+
+Which task number (1-{len(tasks)}) is the user most likely referring to?
+If no task matches well, respond with 0.
+
+Respond with ONLY a JSON object:
+{{"task_number": <number>, "confidence": "high" | "medium" | "low"}}"""
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                GROQ_API_URL,
+                headers={
+                    "Authorization": f"Bearer {GROQ_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [
+                        {"role": "system", "content": "You match user requests to task items. Be accurate."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.1,
+                    "max_tokens": 100
+                },
+                timeout=30.0
+            )
+            
+            if response.status_code != 200:
+                print(f"AI match error: {response.status_code}")
+                return None
+            
+            data = response.json()
+            content = data["choices"][0]["message"]["content"].strip()
+            
+            # Strip markdown if present
+            if content.startswith("```"):
+                lines = content.split("\n")
+                lines = lines[1:-1] if lines[-1].strip() == "```" else lines[1:]
+                content = "\n".join(lines)
+            
+            result = json.loads(content)
+            task_num = result.get("task_number", 0)
+            confidence = result.get("confidence", "low")
+            
+            print(f"AI matched task #{task_num} with {confidence} confidence")
+            
+            if task_num > 0 and task_num in task_map:
+                return task_map[task_num]
+            return None
+            
+    except Exception as e:
+        print(f"AI match error: {e}")
+        return None
+
+
 async def categorize_message(message_text, has_image=False, has_file=False):
     """
     Categorize a message using Groq's Llama 3

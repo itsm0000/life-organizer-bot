@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 import asyncio
 
 # Import our modules
-from ai_categorizer import categorize_message, analyze_image, parse_management_intent
+from ai_categorizer import categorize_message, analyze_image, parse_management_intent, ai_match_task
 from notion_integration import (
     add_to_life_areas, add_to_brain_dump, log_progress, get_active_items,
     search_items, update_item, delete_item, get_items_by_category, format_item_for_display
@@ -216,28 +216,26 @@ async def handle_management_command(update: Update, intent: dict, user_id: int):
             await update.message.reply_text(response, parse_mode="Markdown")
         return
     
-    # For delete, complete, update - need to search for the item
-    if not target:
-        await update.message.reply_text("❓ Which item? Please be more specific.")
+    # For delete, complete, update - need to find the item using AI matching
+    # Get all active items and let AI pick the best match
+    all_items = get_active_items()
+    
+    if not all_items:
+        await update.message.reply_text("📋 No active items to manage.")
         return
     
-    items = search_items(target)
+    # Use AI to find the best matching task
+    matched_item = await ai_match_task(target or intent.get("original_text", ""), all_items)
     
-    if not items:
-        await update.message.reply_text(f"🔍 Couldn't find any item matching '{target}'.")
+    if not matched_item:
+        await update.message.reply_text(
+            f"🔍 Couldn't find a matching task for '{target}'.\n\n"
+            f"💡 Try saying: /active to see all your tasks"
+        )
         return
     
-    if len(items) > 1:
-        # Multiple matches - show options
-        response = f"🔍 Found {len(items)} items matching '{target}':\n\n"
-        for i, item in enumerate(items[:5], 1):
-            response += f"{i}. {format_item_for_display(item)}\n"
-        response += "\nPlease be more specific."
-        await update.message.reply_text(response)
-        return
-    
-    # Single match found
-    item = items[0]
+    # AI found a match
+    item = matched_item
     page_id = item["id"]
     title = item["properties"].get("Name", {}).get("title", [{}])[0].get("text", {}).get("content", "Untitled")
     
