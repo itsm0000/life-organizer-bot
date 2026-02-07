@@ -36,6 +36,68 @@ pending_deletes = {}
 # Load environment variables
 load_dotenv()
 
+# =============================================================================
+# SECURITY: Whitelist & Rate Limiting (Phase 1)
+# =============================================================================
+from collections import defaultdict
+import time
+from functools import wraps
+
+# Parse ALLOWED_USER_IDS from env (comma-separated list)
+_allowed_ids_str = os.getenv("ALLOWED_USER_IDS", "")
+ALLOWED_USER_IDS = [int(x.strip()) for x in _allowed_ids_str.split(",") if x.strip().isdigit()]
+
+# Rate limiting config
+_request_history = defaultdict(list)
+RATE_LIMIT_WINDOW = 60  # seconds
+MAX_REQUESTS_PER_WINDOW = 20
+
+
+def authorized_only(func):
+    """Only allow whitelisted users. Silently ignore unauthorized."""
+    @wraps(func)
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+        user = update.effective_user
+        if not user:
+            return
+        # If whitelist is empty, allow everyone (for backwards compatibility)
+        if ALLOWED_USER_IDS and user.id not in ALLOWED_USER_IDS:
+            logger.warning(f"Unauthorized access attempt: {user.id} ({user.first_name})")
+            return  # Silently ignore
+        return await func(update, context, *args, **kwargs)
+    return wrapper
+
+
+def rate_limited(func):
+    """Limit requests per user to prevent abuse."""
+    @wraps(func)
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+        user = update.effective_user
+        if not user:
+            return await func(update, context, *args, **kwargs)
+        
+        user_id = user.id
+        now = time.time()
+        
+        # Clean old requests
+        _request_history[user_id] = [
+            t for t in _request_history[user_id] 
+            if now - t < RATE_LIMIT_WINDOW
+        ]
+        
+        if len(_request_history[user_id]) >= MAX_REQUESTS_PER_WINDOW:
+            await update.message.reply_text("⏳ Too many requests. Please wait a moment.")
+            return
+        
+        _request_history[user_id].append(now)
+        return await func(update, context, *args, **kwargs)
+    return wrapper
+
+
+def secure(func):
+    """Combined decorator: authorized + rate limited."""
+    return authorized_only(rate_limited(func))
+
 # Enable logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -44,6 +106,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+@secure
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send a message when the command /start is issued."""
     user = update.effective_user
@@ -61,6 +124,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+@secure
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send a message when the command /help is issued."""
     await update.message.reply_text(
@@ -80,6 +144,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+@secure
 async def active_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show active items from Notion"""
     await update.message.reply_text("🔍 Fetching your active items...")
@@ -111,6 +176,7 @@ async def active_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(message, parse_mode="Markdown")
 
 
+@secure
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle text messages - both new items and task management"""
     text = update.message.text
@@ -270,6 +336,7 @@ async def handle_management_command(update: Update, intent: dict, user_id: int):
             await update.message.reply_text("❌ Failed to update priority. Try again.")
 
 
+@secure
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle photo messages with AI vision analysis"""
     photo = update.message.photo[-1]  # Get highest resolution
@@ -332,6 +399,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ Error processing image. Saved to Brain Dump.")
 
 
+@secure
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle document/PDF messages"""
     document = update.message.document
@@ -361,6 +429,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+@secure
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle voice messages with transcription"""
     voice = update.message.voice
@@ -457,6 +526,158 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         add_to_brain_dump("Voice note (error)", f"Error: {str(e)}", "Voice", file.file_path)
 
 
+# =============================================================================
+# FOCUS MODE: ADHD-Friendly Single Task Mode (Phase 2)
+# =============================================================================
+from telegram.ext import ConversationHandler, CallbackQueryHandler
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+FOCUS_CHOOSING, FOCUS_ACTIVE = range(2)
+_focus_sessions = {}  # {user_id: {"task": task_name, "page_id": page_id}}
+
+
+@secure
+async def focus_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Start Focus Mode - show high priority tasks to choose from."""
+    user_id = update.effective_user.id
+    
+    await update.message.reply_text("🎯 *Focus Mode*\n\nFetching your top priority tasks...", parse_mode="Markdown")
+    
+    items = get_active_items()
+    if not items:
+        await update.message.reply_text("No active tasks! Add some tasks first.")
+        return ConversationHandler.END
+    
+    # Filter and sort by priority
+    high_priority = []
+    for item in items:
+        props = item.get("properties", {})
+        priority = props.get("Priority", {}).get("select", {}).get("name", "Medium")
+        title = props.get("Name", {}).get("title", [{}])[0].get("plain_text", "Untitled")
+        if priority in ["High", "Medium"]:
+            high_priority.append({
+                "id": item["id"],
+                "title": title,
+                "priority": priority
+            })
+    
+    if not high_priority:
+        await update.message.reply_text("No high priority tasks. Enjoy your break! ☕")
+        return ConversationHandler.END
+    
+    # Create inline keyboard with top 5 tasks
+    keyboard = []
+    for i, task in enumerate(high_priority[:5]):
+        icon = "🔴" if task["priority"] == "High" else "🟡"
+        keyboard.append([InlineKeyboardButton(
+            f"{icon} {task['title'][:40]}", 
+            callback_data=f"focus_{i}"
+        )])
+    keyboard.append([InlineKeyboardButton("❌ Cancel", callback_data="focus_cancel")])
+    
+    # Store tasks in context for callback
+    context.user_data["focus_tasks"] = high_priority[:5]
+    
+    await update.message.reply_text(
+        "🧘 *Pick ONE task to focus on:*\n\n"
+        "Everything else will wait. Just this one thing.",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
+    return FOCUS_CHOOSING
+
+
+async def focus_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle task selection in Focus Mode."""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "focus_cancel":
+        await query.edit_message_text("Focus mode cancelled. Back to chaos! 🌪️")
+        return ConversationHandler.END
+    
+    # Parse task index
+    task_idx = int(query.data.replace("focus_", ""))
+    tasks = context.user_data.get("focus_tasks", [])
+    
+    if task_idx >= len(tasks):
+        await query.edit_message_text("Something went wrong. Try /focus again.")
+        return ConversationHandler.END
+    
+    task = tasks[task_idx]
+    user_id = update.effective_user.id
+    
+    # Store active focus session
+    _focus_sessions[user_id] = {
+        "task": task["title"],
+        "page_id": task["id"]
+    }
+    
+    await query.edit_message_text(
+        f"🎯 *FOCUS MODE ACTIVE*\n\n"
+        f"📌 *{task['title']}*\n\n"
+        f"This is your ONE thing right now.\n"
+        f"Everything else can wait.\n\n"
+        f"When done, say: *done* or *finished*\n"
+        f"To exit focus mode: /cancel",
+        parse_mode="Markdown"
+    )
+    return FOCUS_ACTIVE
+
+
+async def focus_complete(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Complete the focused task."""
+    user_id = update.effective_user.id
+    text = update.message.text.lower()
+    
+    if text in ["done", "finished", "complete", "تم", "خلص"]:
+        session = _focus_sessions.pop(user_id, None)
+        if session:
+            # Mark task as done in Notion
+            update_item(session["page_id"], {"status": "Done"})
+            await update.message.reply_text(
+                f"🎉 *AMAZING!*\n\n"
+                f"You crushed it! ✅ *{session['task']}* is DONE!\n\n"
+                f"Take a breather, then /focus on the next one.",
+                parse_mode="Markdown"
+            )
+        else:
+            await update.message.reply_text("No active focus session. Start with /focus")
+        return ConversationHandler.END
+    
+    # User is chatting while in focus mode - gentle reminder
+    session = _focus_sessions.get(user_id, {})
+    task = session.get("task", "your task")
+    await update.message.reply_text(
+        f"🧘 Still in Focus Mode on: *{task}*\n\n"
+        f"Say *done* when finished, or /cancel to exit.",
+        parse_mode="Markdown"
+    )
+    return FOCUS_ACTIVE
+
+
+async def focus_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Cancel focus mode."""
+    user_id = update.effective_user.id
+    _focus_sessions.pop(user_id, None)
+    await update.message.reply_text("Focus mode ended. No worries, you can try again anytime! 💪")
+    return ConversationHandler.END
+
+
+# Create the ConversationHandler
+focus_handler = ConversationHandler(
+    entry_points=[CommandHandler("focus", focus_start)],
+    states={
+        FOCUS_CHOOSING: [CallbackQueryHandler(focus_chosen, pattern="^focus_")],
+        FOCUS_ACTIVE: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, focus_complete),
+            CommandHandler("cancel", focus_cancel),
+        ],
+    },
+    fallbacks=[CommandHandler("cancel", focus_cancel)],
+)
+
+
 def main():
     """Start the bot"""
     # Create the Application
@@ -466,6 +687,9 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("active", active_command))
+    
+    # Focus Mode (must be before generic text handler)
+    application.add_handler(focus_handler)
     
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
