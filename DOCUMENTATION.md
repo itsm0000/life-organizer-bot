@@ -514,6 +514,14 @@ for page in doc:
 
 ---
 
+### 11. Multilingual Support (Arabic & English)
+The bot now intelligently handles bilingual input:
+- **Arabic Input:** Preserves the original Arabic text for titles, summaries, and notes.
+- **English Input:** Preserves English text.
+- **Unified Organization:** Categories, Priorities, and Types remain in English (e.g., "Health", "Study") regardless of input language, ensuring consistent sorting and filtering in Notion.
+
+---
+
 ## Troubleshooting
 
 ### Bot not responding?

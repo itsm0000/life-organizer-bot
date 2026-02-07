@@ -16,7 +16,12 @@ GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 CATEGORIZATION_PROMPT = """You are an AI assistant helping someone with ADHD organize their life. 
 Analyze the following message and categorize it.
 
-Categories:
+IMPORTANT:
+- If the user writes/speaks in English, use English for the title/summary.
+- If the user writes/speaks in ARABIC (or another language), KEEP the 'title' and 'summary' in that ORIGINAL LANGUAGE. Do NOT translate them to English.
+- However, ALWAYS keep the JSON values for 'category', 'type', and 'priority' in ENGLISH (as listed below) regardless of the input language.
+
+Categories (Select one of these exact English names):
 - Health: fitness, nutrition, skincare, sleep, medical
 - Study: university courses, exams, assignments, learning materials
 - Personal Projects: coding projects, side businesses, entrepreneurship
@@ -25,7 +30,7 @@ Categories:
 - Shopping: things to buy, product research
 - Ideas: random thoughts, future possibilities, things to explore
 
-Types:
+Types (Select one of these exact English names):
 - Task: something to do
 - Goal: something to achieve
 - Idea: something to consider/explore
@@ -41,9 +46,9 @@ Respond ONLY with valid JSON, no other text:
   "category": "category_name",
   "type": "type_name",
   "priority": "priority_level",
-  "title": "short title (max 50 chars)",
-  "summary": "brief summary of the content",
-  "suggested_action": "what the user should do with this (optional)"
+  "title": "short title (max 50 chars) - in original language",
+  "summary": "brief summary of the content - in original language",
+  "suggested_action": "what the user should do with this (optional) - in original language"
 }"""
 
 
@@ -56,11 +61,16 @@ Management actions:
 - query: list/show items ("what tasks in Health?", "show my shopping list")
 - none: not a management command - user wants to ADD something new
 
+IMPORTANT: 
+- The user may use Arabic or English. 
+- Extract the 'target' in the EXACT language used by the user. 
+- If they say "روتين البشرة", target must be "روتين البشرة". Do NOT translate target to English.
+
 Respond ONLY with valid JSON:
 {
   "intent": "delete" | "update_priority" | "complete" | "query" | "none",
-  "target": "search term to find the item (extract key words)",
-  "category": "category name if querying by category, else null",
+  "target": "search term to find the item (extract key words in original language)",
+  "category": "category name if querying by category (in English), else null",
   "new_priority": "High" | "Medium" | "Low" (only for update_priority, else null)
 }"""
 
