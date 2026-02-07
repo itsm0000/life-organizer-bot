@@ -122,29 +122,138 @@ async def categorize_message(message_text, has_image=False, has_file=False):
         }
 
 
-async def analyze_image(image_data, caption=""):
+async def analyze_image(image_bytes: bytes, caption: str = "") -> dict:
     """
-    Analyze an image - placeholder for future implementation
-    Note: Groq doesn't support vision yet, so we use caption-based categorization
+    Analyze an image using Groq's Llama 3.2 Vision model
     
     Args:
-        image_data: Image bytes or PIL Image
-        caption: Optional text caption
+        image_bytes: Raw image bytes
+        caption: Optional text caption from user
     
     Returns:
-        dict: Analysis results
+        dict: Analysis results with description, category, and title
     """
-    # For now, just categorize based on caption
-    if caption:
-        result = await categorize_message(f"Image with caption: {caption}", has_image=True)
+    import base64
+    
+    if not GROQ_API_KEY:
+        print("ERROR: GROQ_API_KEY is not set!")
         return {
-            "description": caption,
-            "category": result["category"],
-            "suggested_title": result["title"]
+            "description": caption or "Image (API key not configured)",
+            "category": "Ideas",
+            "suggested_title": "Image",
+            "priority": "Low",
+            "suggested_action": "Review manually"
         }
     
-    return {
-        "description": "Image without caption",
-        "category": "Ideas",
-        "suggested_title": "Image"
-    }
+    # Encode image as base64
+    image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+    
+    # Build prompt for vision model
+    vision_prompt = """Analyze this image and provide:
+1. A brief description of what's in the image
+2. The most appropriate category from: Health, Study, Personal Projects, Skills, Creative, Shopping, Ideas
+3. A suggested title (max 5 words)
+4. Priority: High, Medium, or Low
+5. A suggested action
+
+Respond in JSON format:
+{
+    "description": "brief description",
+    "category": "category name",
+    "suggested_title": "short title",
+    "priority": "priority level",
+    "suggested_action": "what to do next"
+}"""
+
+    if caption:
+        vision_prompt += f"\n\nUser's caption: {caption}"
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                GROQ_API_URL,
+                headers={
+                    "Authorization": f"Bearer {GROQ_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "llama-3.2-90b-vision-preview",
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": vision_prompt
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:image/jpeg;base64,{image_base64}"
+                                    }
+                                }
+                            ]
+                        }
+                    ],
+                    "temperature": 0.3,
+                    "max_tokens": 500
+                },
+                timeout=60.0  # Vision can take longer
+            )
+            
+            if response.status_code != 200:
+                print(f"Vision API error: {response.status_code} - {response.text}")
+                # Fallback to caption-based categorization
+                if caption:
+                    result = await categorize_message(f"Image with caption: {caption}", has_image=True)
+                    return {
+                        "description": caption,
+                        "category": result["category"],
+                        "suggested_title": result["title"],
+                        "priority": result["priority"],
+                        "suggested_action": result["suggested_action"]
+                    }
+                return {
+                    "description": "Image (vision analysis failed)",
+                    "category": "Ideas",
+                    "suggested_title": "Image",
+                    "priority": "Low",
+                    "suggested_action": "Review manually"
+                }
+            
+            data = response.json()
+            content = data["choices"][0]["message"]["content"]
+            
+            # Parse JSON from response
+            result = json.loads(content)
+            return result
+            
+    except json.JSONDecodeError as e:
+        print(f"JSON parse error: {e}")
+        # Try to extract info from non-JSON response
+        return {
+            "description": content if 'content' in dir() else "Image analysis",
+            "category": "Ideas",
+            "suggested_title": caption[:50] if caption else "Image",
+            "priority": "Low",
+            "suggested_action": "Review manually"
+        }
+    except Exception as e:
+        print(f"Vision error: {e}")
+        # Fallback
+        if caption:
+            result = await categorize_message(f"Image: {caption}", has_image=True)
+            return {
+                "description": caption,
+                "category": result["category"],
+                "suggested_title": result["title"],
+                "priority": result["priority"],
+                "suggested_action": result.get("suggested_action", "Review")
+            }
+        return {
+            "description": f"Image (error: {str(e)[:50]})",
+            "category": "Ideas",
+            "suggested_title": "Image",
+            "priority": "Low",
+            "suggested_action": "Review manually"
+        }

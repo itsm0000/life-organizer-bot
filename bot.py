@@ -157,51 +157,64 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle photo messages"""
+    """Handle photo messages with AI vision analysis"""
     photo = update.message.photo[-1]  # Get highest resolution
     caption = update.message.caption or ""
     user = update.effective_user
     
     logger.info(f"Received photo from {user.first_name}")
     
-    await update.message.reply_text("📸 Analyzing image...")
+    # Show typing indicator
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     
     # Download photo
     file = await context.bot.get_file(photo.file_id)
-    file_url = file.file_path
     
-    # Analyze with AI
     try:
-        # For now, use caption + image URL
-        # In production, you'd download and send image bytes to Gemini
-        result = await categorize_message(
-            f"Image: {caption}" if caption else "Image received",
-            has_image=True
-        )
+        # Download the image bytes
+        image_bytes = await file.download_as_bytearray()
+        
+        # Analyze with AI Vision
+        logger.info("Analyzing image with Llama Vision...")
+        result = await analyze_image(bytes(image_bytes), caption)
+        
+        logger.info(f"Vision result: {result}")
+        
+        # Extract results
+        description = result.get("description", caption or "Image")
+        category = result.get("category", "Ideas")
+        title = result.get("suggested_title", "Image")
+        priority = result.get("priority", "Low")
+        suggestion = result.get("suggested_action", "")
         
         # Add to Notion
         notion_id = add_to_life_areas(
-            category=result["category"],
-            title=result["title"],
-            item_type=result["type"],
-            priority=result["priority"],
-            notes=result["summary"],
-            image_url=file_url
+            category=category,
+            title=title,
+            item_type="Resource",
+            priority=priority,
+            notes=f"📸 Image Analysis:\n\n{description}",
+            image_url=file.file_path
         )
         
         if notion_id:
-            await update.message.reply_text(
-                f"✅ Image saved to *{result['category']}*\n"
-                f"📌 {result['title']}",
-                parse_mode="Markdown"
+            response = (
+                f"📸 Image analyzed & added to {category}\n\n"
+                f"👁️ \"{description[:100]}{'...' if len(description) > 100 else ''}\"\n\n"
+                f"📌 {title}\n"
+                f"🎯 Priority: {priority}"
             )
+            if suggestion:
+                response += f"\n💡 Suggestion: {suggestion}"
+            
+            await update.message.reply_text(response)
         else:
-            add_to_brain_dump(caption or "Image", caption, "Image", file_url)
-            await update.message.reply_text("⚠️ Added to Brain Dump for review")
+            add_to_brain_dump(title, description, "Image", file.file_path)
+            await update.message.reply_text("⚠️ Analyzed but couldn't save. Added to Brain Dump.")
     
     except Exception as e:
         logger.error(f"Error processing photo: {e}")
-        add_to_brain_dump(caption or "Image", caption, "Image", file_url)
+        add_to_brain_dump(caption or "Image", f"Error: {str(e)}", "Image", file.file_path)
         await update.message.reply_text("⚠️ Error processing image. Saved to Brain Dump.")
 
 

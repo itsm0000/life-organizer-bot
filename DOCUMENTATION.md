@@ -38,7 +38,7 @@ This bot removes all friction: just dump your thoughts via Telegram, and AI hand
 |---------|--------|-------------|
 | Text Messages | ✅ Working | AI-categorized and stored in Notion |
 | Arabic Support | ✅ Working | Full Arabic language understanding |
-| Photo Messages | ✅ Working | Stored with caption-based categorization |
+| Photo Messages | ✅ Working | Analyzed with Llama 3.2 Vision AI |
 | Documents/PDFs | ✅ Working | Saved to Brain Dump for review |
 | Voice Notes | ✅ Working | Transcribed with Groq Whisper, then categorized |
 | AI Suggestions | ✅ Working | Contextual action suggestions |
