@@ -18,6 +18,7 @@ import asyncio
 # Import our modules
 from ai_categorizer import categorize_message, analyze_image
 from notion_integration import add_to_life_areas, add_to_brain_dump, log_progress, get_active_items
+from voice_transcriber import transcribe_voice
 
 # Load environment variables
 load_dotenv()
@@ -234,20 +235,87 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle voice messages"""
+    """Handle voice messages with transcription"""
     voice = update.message.voice
+    user = update.message.from_user
     
-    logger.info("Received voice message")
+    logger.info(f"Received voice message from {user.first_name}")
     
-    await update.message.reply_text(
-        "🎤 Voice note received!\n\n"
-        "Voice transcription coming soon. For now, saved to Brain Dump."
-    )
+    # Show typing indicator
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     
+    # Download voice file
     file = await context.bot.get_file(voice.file_id)
-    file_url = file.file_path
     
-    add_to_brain_dump("Voice note", "Voice message", "Voice", file_url)
+    try:
+        # Download the audio bytes
+        audio_bytes = await file.download_as_bytearray()
+        
+        # Transcribe using Groq Whisper
+        logger.info("Transcribing voice note...")
+        transcription = await transcribe_voice(bytes(audio_bytes), "voice.ogg")
+        
+        if transcription.startswith("["):
+            # Transcription failed
+            logger.error(f"Transcription failed: {transcription}")
+            await update.message.reply_text(
+                f"🎤 Voice note received but transcription failed.\n\n"
+                f"Saved to Brain Dump for manual review."
+            )
+            add_to_brain_dump("Voice note (transcription failed)", "Voice message", "Voice", file.file_path)
+            return
+        
+        logger.info(f"Transcription: {transcription[:100]}...")
+        
+        # Now categorize the transcribed text
+        logger.info("Calling AI categorizer...")
+        result = await categorize_message(transcription)
+        logger.info(f"AI result: {result}")
+        
+        # Add to appropriate Notion database
+        category = result.get("category", "Ideas")
+        item_type = result.get("type", "Idea")
+        priority = result.get("priority", "Low")
+        title = result.get("title", transcription[:50])
+        summary = result.get("summary", transcription)
+        suggestion = result.get("suggested_action", "")
+        
+        # Store in Life Areas
+        logger.info(f"Adding to Notion Life Areas: {category}")
+        notion_id = add_to_life_areas(
+            title=title,
+            category=category,
+            item_type=item_type,
+            priority=priority,
+            notes=f"🎤 Voice note transcription:\n\n{transcription}"
+        )
+        
+        logger.info(f"Notion response ID: {notion_id}")
+        
+        if notion_id:
+            response = (
+                f"🎤 Voice transcribed & added to {category}\n\n"
+                f"📝 \"{transcription[:100]}{'...' if len(transcription) > 100 else ''}\"\n\n"
+                f"📌 {title}\n"
+                f"🎯 Priority: {priority}"
+            )
+            if suggestion:
+                response += f"\n💡 Suggestion: {suggestion}"
+            
+            await update.message.reply_text(response)
+        else:
+            logger.error("Notion returned None - adding to Brain Dump")
+            add_to_brain_dump(title, transcription, "Voice")
+            await update.message.reply_text(
+                "⚠️ Transcribed but couldn't categorize. Added to Brain Dump."
+            )
+            
+    except Exception as e:
+        logger.error(f"Voice handling error: {e}")
+        await update.message.reply_text(
+            "⚠️ Error processing voice note. Added to Brain Dump for review."
+        )
+        add_to_brain_dump("Voice note (error)", f"Error: {str(e)}", "Voice", file.file_path)
 
 
 def main():
