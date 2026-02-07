@@ -1,160 +1,156 @@
 """
-Notion Database Setup Script
-Creates the necessary databases in Notion workspace
+Setup Notion Database Properties
+Run this locally to add required properties to your databases
 """
 import os
-from notion_client import Client
+import requests
 from dotenv import load_dotenv
 
 load_dotenv()
 
-notion = Client(auth=os.getenv("NOTION_TOKEN"))
+NOTION_TOKEN = os.getenv("NOTION_TOKEN")
+LIFE_AREAS_DB_ID = os.getenv("LIFE_AREAS_DB_ID")
+BRAIN_DUMP_DB_ID = os.getenv("BRAIN_DUMP_DB_ID")
+PROGRESS_DB_ID = os.getenv("PROGRESS_DB_ID")
 
-def create_life_areas_database(parent_page_id):
-    """Create the Life Areas database"""
-    database = notion.databases.create(
-        parent={"type": "page_id", "page_id": parent_page_id},
-        title=[{"type": "text", "text": {"content": "Life Areas"}}],
-        properties={
-            "Name": {"title": {}},
-            "Category": {
-                "select": {
-                    "options": [
-                        {"name": "Health", "color": "green"},
-                        {"name": "Study", "color": "blue"},
-                        {"name": "Personal Projects", "color": "purple"},
-                        {"name": "Skills", "color": "yellow"},
-                        {"name": "Creative", "color": "pink"},
-                        {"name": "Shopping", "color": "orange"},
-                        {"name": "Ideas", "color": "gray"},
-                    ]
-                }
-            },
-            "Type": {
-                "select": {
-                    "options": [
-                        {"name": "Task", "color": "default"},
-                        {"name": "Goal", "color": "blue"},
-                        {"name": "Idea", "color": "gray"},
-                        {"name": "Resource", "color": "brown"},
-                    ]
-                }
-            },
-            "Status": {
-                "select": {
-                    "options": [
-                        {"name": "Active", "color": "green"},
-                        {"name": "Parked", "color": "yellow"},
-                        {"name": "Done", "color": "blue"},
-                        {"name": "Dropped", "color": "red"},
-                    ]
-                }
-            },
-            "Priority": {
-                "select": {
-                    "options": [
-                        {"name": "High", "color": "red"},
-                        {"name": "Medium", "color": "yellow"},
-                        {"name": "Low", "color": "gray"},
-                    ]
-                }
-            },
-            "Date Added": {"date": {}},
-            "Notes": {"rich_text": {}},
-            "Image": {"files": {}},
-        },
-    )
-    return database["id"]
+headers = {
+    "Authorization": f"Bearer {NOTION_TOKEN}",
+    "Content-Type": "application/json",
+    "Notion-Version": "2022-06-28"
+}
 
+def update_database(db_id, db_name, properties):
+    """Update a database with new properties"""
+    print(f"\nSetting up {db_name}...")
+    
+    url = f"https://api.notion.com/v1/databases/{db_id}"
+    data = {"properties": properties}
+    
+    response = requests.patch(url, headers=headers, json=data)
+    
+    if response.status_code == 200:
+        print(f"  SUCCESS: {db_name} properties added!")
+        return True
+    else:
+        print(f"  ERROR: {response.status_code}")
+        print(f"  {response.text}")
+        return False
 
-def create_brain_dump_database(parent_page_id):
-    """Create the Brain Dump inbox database"""
-    database = notion.databases.create(
-        parent={"type": "page_id", "page_id": parent_page_id},
-        title=[{"type": "text", "text": {"content": "Brain Dump Inbox"}}],
-        properties={
-            "Name": {"title": {}},
-            "Content": {"rich_text": {}},
-            "Processed": {"checkbox": {}},
-            "Date": {"date": {}},
-            "Type": {
-                "select": {
-                    "options": [
-                        {"name": "Text", "color": "default"},
-                        {"name": "Image", "color": "blue"},
-                        {"name": "PDF", "color": "red"},
-                        {"name": "Voice", "color": "green"},
-                    ]
-                }
-            },
-            "Files": {"files": {}},
-        },
-    )
-    return database["id"]
+# Life Areas Database Properties
+life_areas_properties = {
+    "Category": {
+        "select": {
+            "options": [
+                {"name": "Health", "color": "green"},
+                {"name": "Study", "color": "blue"},
+                {"name": "Personal Projects", "color": "purple"},
+                {"name": "Skills", "color": "orange"},
+                {"name": "Creative", "color": "pink"},
+                {"name": "Shopping", "color": "yellow"},
+                {"name": "Ideas", "color": "gray"}
+            ]
+        }
+    },
+    "Type": {
+        "select": {
+            "options": [
+                {"name": "Task", "color": "blue"},
+                {"name": "Goal", "color": "green"},
+                {"name": "Idea", "color": "yellow"},
+                {"name": "Resource", "color": "gray"}
+            ]
+        }
+    },
+    "Status": {
+        "select": {
+            "options": [
+                {"name": "Active", "color": "green"},
+                {"name": "Parked", "color": "yellow"},
+                {"name": "Done", "color": "gray"},
+                {"name": "Dropped", "color": "red"}
+            ]
+        }
+    },
+    "Priority": {
+        "select": {
+            "options": [
+                {"name": "High", "color": "red"},
+                {"name": "Medium", "color": "yellow"},
+                {"name": "Low", "color": "gray"}
+            ]
+        }
+    },
+    "Date Added": {"date": {}},
+    "Notes": {"rich_text": {}}
+}
 
+# Brain Dump Database Properties
+brain_dump_properties = {
+    "Content": {"rich_text": {}},
+    "Processed": {"checkbox": {}},
+    "Date": {"date": {}},
+    "Type": {
+        "select": {
+            "options": [
+                {"name": "Text", "color": "blue"},
+                {"name": "Image", "color": "green"},
+                {"name": "PDF", "color": "orange"},
+                {"name": "Voice", "color": "purple"}
+            ]
+        }
+    }
+}
 
-def create_progress_tracker(parent_page_id):
-    """Create the Progress Tracker database"""
-    database = notion.databases.create(
-        parent={"type": "page_id", "page_id": parent_page_id},
-        title=[{"type": "text", "text": {"content": "Progress Log"}}],
-        properties={
-            "Activity": {"title": {}},
-            "Category": {
-                "select": {
-                    "options": [
-                        {"name": "Health", "color": "green"},
-                        {"name": "Study", "color": "blue"},
-                        {"name": "Personal Projects", "color": "purple"},
-                        {"name": "Skills", "color": "yellow"},
-                        {"name": "Creative", "color": "pink"},
-                    ]
-                }
-            },
-            "Date": {"date": {}},
-            "Duration": {"number": {}},
-            "Notes": {"rich_text": {}},
-        },
-    )
-    return database["id"]
-
-
-def setup_notion_workspace():
-    """Main setup function"""
-    print("Setting up Notion workspace...")
-    
-    # Get the first page in the workspace to use as parent
-    search_results = notion.search(filter={"property": "object", "value": "page"})
-    if not search_results["results"]:
-        print("Error: No pages found in workspace. Please create a page first.")
-        return
-    
-    parent_page = search_results["results"][0]
-    parent_id = parent_page["id"]
-    
-    print(f"Using page '{parent_page.get('properties', {}).get('title', {}).get('title', [{}])[0].get('plain_text', 'Untitled')}' as parent")
-    
-    # Create databases
-    print("Creating Life Areas database...")
-    life_areas_id = create_life_areas_database(parent_id)
-    print(f"[OK] Life Areas DB created: {life_areas_id}")
-    
-    print("Creating Brain Dump database...")
-    brain_dump_id = create_brain_dump_database(parent_id)
-    print(f"[OK] Brain Dump DB created: {brain_dump_id}")
-    
-    print("Creating Progress Tracker...")
-    progress_id = create_progress_tracker(parent_id)
-    print(f"[OK] Progress Tracker created: {progress_id}")
-    
-    print("\n" + "="*50)
-    print("Setup complete! Add these to your .env file:")
-    print("="*50)
-    print(f"LIFE_AREAS_DB_ID={life_areas_id}")
-    print(f"BRAIN_DUMP_DB_ID={brain_dump_id}")
-    print(f"PROGRESS_DB_ID={progress_id}")
-    print("="*50)
+# Progress Log Database Properties  
+progress_log_properties = {
+    "Category": {
+        "select": {
+            "options": [
+                {"name": "Health", "color": "green"},
+                {"name": "Study", "color": "blue"},
+                {"name": "Personal Projects", "color": "purple"},
+                {"name": "Skills", "color": "orange"},
+                {"name": "Creative", "color": "pink"}
+            ]
+        }
+    },
+    "Date": {"date": {}},
+    "Duration": {"number": {"format": "number"}},
+    "Notes": {"rich_text": {}}
+}
 
 
 if __name__ == "__main__":
-    setup_notion_workspace()
+    print("=" * 50)
+    print("Notion Database Setup")
+    print("=" * 50)
+    
+    if not NOTION_TOKEN:
+        print("ERROR: NOTION_TOKEN not set in .env")
+        exit(1)
+    
+    # Update each database
+    success = True
+    
+    if LIFE_AREAS_DB_ID:
+        success &= update_database(LIFE_AREAS_DB_ID, "Life Areas", life_areas_properties)
+    else:
+        print("WARNING: LIFE_AREAS_DB_ID not set")
+    
+    if BRAIN_DUMP_DB_ID:
+        success &= update_database(BRAIN_DUMP_DB_ID, "Brain Dump", brain_dump_properties)
+    else:
+        print("WARNING: BRAIN_DUMP_DB_ID not set")
+    
+    if PROGRESS_DB_ID:
+        success &= update_database(PROGRESS_DB_ID, "Progress Log", progress_log_properties)
+    else:
+        print("WARNING: PROGRESS_DB_ID not set")
+    
+    print("\n" + "=" * 50)
+    if success:
+        print("All databases set up successfully!")
+        print("You can now use the bot.")
+    else:
+        print("Some databases failed to set up. Check errors above.")
+    print("=" * 50)
