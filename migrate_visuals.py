@@ -26,28 +26,29 @@ CATEGORY_ICONS = {
     "Finance": "💰",
     "Social": "👥",
     "Personal": "🌟",
+    "Personal Projects": "🚀",
 }
 
-# Animated gradient GIFs for more visual appeal
-PRIORITY_COVERS = {
-    "High": "https://media.giphy.com/media/l0HlBO7eyXzSZkJri/giphy.gif",  # Animated purple
-    "Medium": "https://media.giphy.com/media/3o7TKSjRrfIPjeYFEc/giphy.gif",  # Animated gradient
-    "Low": "https://media.giphy.com/media/xTiTnxpQ3ghPiB2Hp6/giphy.gif",  # Soft animated
+# Category-specific cover images (Unsplash - reliable and matching content)
+CATEGORY_COVERS = {
+    "Health": "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=1200",  # Fitness/wellness
+    "Study": "https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=1200",  # Books/study
+    "Work": "https://images.unsplash.com/photo-1497215842964-222b430dc094?w=1200",  # Modern office
+    "Ideas": "https://images.unsplash.com/photo-1493612276216-ee3925520721?w=1200",  # Creative lightbulbs
+    "Shopping": "https://images.unsplash.com/photo-1483985988355-763728e1935b?w=1200",  # Shopping bags
+    "Skills": "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=1200",  # Learning/skills
+    "Finance": "https://images.unsplash.com/photo-1579621970563-ebec7560ff3e?w=1200",  # Finance/money
+    "Social": "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=1200",  # Friends/social
+    "Personal": "https://images.unsplash.com/photo-1516534775068-ba3e7458af70?w=1200",  # Personal growth
+    "Personal Projects": "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=1200",  # Projects/laptop
 }
 
-# Fallback to static Unsplash if GIFs cause issues
-PRIORITY_COVERS_STATIC = {
-    "High": "https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=1200",
-    "Medium": "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=1200",
-    "Low": "https://images.unsplash.com/photo-1558591710-4b4a1ae0f04d?w=1200",
-}
+DEFAULT_COVER = "https://images.unsplash.com/photo-1557683316-973673baf926?w=1200"  # Purple gradient fallback
 
 
-def migrate_life_areas(use_animated=True):
-    """Update all Life Areas pages with icons and covers"""
+def migrate_life_areas():
+    """Update all Life Areas pages with icons and category-matched covers"""
     db_id = os.getenv("LIFE_AREAS_DB_ID")
-    
-    covers = PRIORITY_COVERS if use_animated else PRIORITY_COVERS_STATIC
     
     print(f"🔄 Fetching pages from Life Areas database...")
     
@@ -70,16 +71,13 @@ def migrate_life_areas(use_animated=True):
         if props.get("Name", {}).get("title"):
             title = props["Name"]["title"][0].get("text", {}).get("content", "Untitled")
         
-        # Get category and priority
+        # Get category
         category = props.get("Category", {}).get("select", {})
         category_name = category.get("name", "Other") if category else "Other"
         
-        priority = props.get("Priority", {}).get("select", {})
-        priority_name = priority.get("name", "Medium") if priority else "Medium"
-        
-        # Determine icon and cover
+        # Determine icon and cover based on CATEGORY (not priority)
         icon_emoji = CATEGORY_ICONS.get(category_name, "📌")
-        cover_url = covers.get(priority_name, covers["Medium"])
+        cover_url = CATEGORY_COVERS.get(category_name, DEFAULT_COVER)
         
         try:
             notion.pages.update(
@@ -87,7 +85,7 @@ def migrate_life_areas(use_animated=True):
                 icon={"type": "emoji", "emoji": icon_emoji},
                 cover={"type": "external", "external": {"url": cover_url}}
             )
-            print(f"✅ {icon_emoji} {title} [{priority_name}]")
+            print(f"✅ {icon_emoji} {title} [{category_name}]")
             updated += 1
         except Exception as e:
             print(f"❌ Failed: {title} - {e}")
@@ -96,14 +94,10 @@ def migrate_life_areas(use_animated=True):
 
 
 if __name__ == "__main__":
-    import sys
-    
-    use_animated = "--static" not in sys.argv
-    
     print("=" * 50)
     print("🎨 Notion Visual Migration Script")
     print("=" * 50)
-    print(f"Mode: {'Animated GIF covers' if use_animated else 'Static image covers'}")
+    print("Mode: Category-matched covers")
     print()
     
-    migrate_life_areas(use_animated)
+    migrate_life_areas()

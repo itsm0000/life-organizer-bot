@@ -29,12 +29,20 @@ def add_to_life_areas(category, title, item_type, priority, notes="", image_url=
         "Personal": "🌟",
     }
     
-    # Priority-based animated gradient GIF covers for visual appeal
-    PRIORITY_COVERS = {
-        "High": "https://media.giphy.com/media/l0HlBO7eyXzSZkJri/giphy.gif",  # Animated purple
-        "Medium": "https://media.giphy.com/media/3o7TKSjRrfIPjeYFEc/giphy.gif",  # Animated gradient
-        "Low": "https://media.giphy.com/media/xTiTnxpQ3ghPiB2Hp6/giphy.gif",  # Soft animated
+    # Category-specific cover images (Unsplash - reliable and matching content)
+    CATEGORY_COVERS = {
+        "Health": "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=1200",  # Fitness/wellness
+        "Study": "https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=1200",  # Books/study
+        "Work": "https://images.unsplash.com/photo-1497215842964-222b430dc094?w=1200",  # Modern office
+        "Ideas": "https://images.unsplash.com/photo-1493612276216-ee3925520721?w=1200",  # Creative lightbulbs
+        "Shopping": "https://images.unsplash.com/photo-1483985988355-763728e1935b?w=1200",  # Shopping bags
+        "Skills": "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=1200",  # Learning/skills
+        "Finance": "https://images.unsplash.com/photo-1579621970563-ebec7560ff3e?w=1200",  # Finance/money
+        "Social": "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=1200",  # Friends/social
+        "Personal": "https://images.unsplash.com/photo-1516534775068-ba3e7458af70?w=1200",  # Personal growth
+        "Personal Projects": "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=1200",  # Projects/laptop
     }
+    DEFAULT_COVER = "https://images.unsplash.com/photo-1557683316-973673baf926?w=1200"  # Purple gradient fallback
     
     properties = {
         "Name": {"title": [{"text": {"content": title}}]},
@@ -51,9 +59,9 @@ def add_to_life_areas(category, title, item_type, priority, notes="", image_url=
     if image_url:
         properties["Image"] = {"files": [{"name": "Image", "external": {"url": image_url}}]}
     
-    # Get icon and cover for visual appeal
+    # Get icon and cover for visual appeal (based on category)
     icon_emoji = CATEGORY_ICONS.get(category, "📌")
-    cover_url = PRIORITY_COVERS.get(priority, PRIORITY_COVERS["Medium"])
+    cover_url = CATEGORY_COVERS.get(category, DEFAULT_COVER)
     
     try:
         page = notion.pages.create(
