@@ -58,6 +58,8 @@ This bot removes all friction: just dump your thoughts via Telegram, and AI hand
 | 📅 Weekly Review | `/weekly` | Progress summary + category breakdown |
 | 🏃 Category Views | `/health`, `/study`, etc. | Quick access to specific categories |
 | 👋 Smart Nudges | Auto (10 AM) | Daily reminder about high-priority tasks |
+| 🔁 Habits System | `/habits` | Recurring tasks with scheduled reminders |
+| ⏰ Morning/Evening Reminders | Auto (8AM/8PM) | Habit reminders at key times |
 
 ---
 
@@ -71,6 +73,7 @@ This bot removes all friction: just dump your thoughts via Telegram, and AI hand
 | `/focus` | Enter Focus Mode - pick ONE task to work on |
 | `/stats` | View your XP, level, and daily streak |
 | `/weekly` | Weekly progress review |
+| `/habits` | 🔁 View recurring habits and completion status |
 | `/health` | 🏃 View Health category tasks |
 | `/study` | 📚 View Study category tasks |
 | `/work` | 💼 View Work category tasks |
@@ -542,6 +545,7 @@ python bot.py
 | `LIFE_AREAS_DB_ID` | Yes | Notion database ID |
 | `BRAIN_DUMP_DB_ID` | Yes | Notion database ID |
 | `PROGRESS_DB_ID` | Yes | Notion database ID |
+| `HABITS_DB_ID` | Yes | Notion Habits database ID |
 | `RAILWAY_PUBLIC_DOMAIN` | Railway only | Enables webhook mode |
 | `PORT` | Railway only | Auto-set by Railway |
 
@@ -732,6 +736,34 @@ Dependencies:
 
 ---
 
+### v2.1.0 (February 8, 2026)
+**Habits System - Branch: `refactor/v2`**
+
+Habits (Recurring Tasks):
+- New Notion database: Habits
+- `/habits` command - View all habits with ✅/⏳ status
+- Natural language habit creation: "Add a skincare habit twice daily"
+- Natural language habit completion: "skincare done"
+- Works via both text and voice messages
+- XP rewards for habit completion
+- Progress logging for habits
+
+Scheduled Reminders:
+- 🌅 8:00 AM (Iraq time) - Morning habits reminder
+- 🌙 8:00 PM (Iraq time) - Evening habits check-in
+
+Fixes:
+- Progress Log now records completed tasks (was never called)
+- Task completion awards +25 XP
+- Notion pages get category-based icons and covers
+
+New Files:
+- `habits.py` - Habit CRUD operations
+- `setup_habits_db.py` - Creates Habits database in Notion
+- `migrate_visuals.py` - Adds icons/covers to existing pages
+
+---
+
 ## Credits
 
 Built with:
@@ -749,4 +781,40 @@ MIT License - Use freely!
 
 ---
 
-*Last updated: February 7, 2026 - v1.1.0-wip*
+## Habits System
+
+### Overview
+Recurring tasks that remind you daily/weekly and reward XP when completed.
+
+### Habits Database Properties
+| Property | Type | Description |
+|----------|------|-------------|
+| Name | Title | Habit name |
+| Frequency | Select | Daily, Twice Daily, Weekly, Monthly |
+| Times | Multi-select | Morning, Evening, Afternoon |
+| Category | Select | Health, Study, Work, Personal, Skills |
+| XP Reward | Number | Points earned per completion (default: 25) |
+| Active | Checkbox | Enable/disable the habit |
+| Last Completed | Date | Tracks most recent completion |
+
+### Natural Language Examples
+
+**Creating habits:**
+- "Add a skincare routine habit, twice daily, morning and evening"
+- "Create a daily workout habit"
+- "Add a weekly meal prep habit"
+
+**Completing habits:**
+- "skincare done"
+- "finished workout"
+- "completed my study session"
+
+### Scheduled Reminders
+| Time (Iraq) | Purpose |
+|-------------|----------|
+| 8:00 AM | Morning habits list with potential XP |
+| 8:00 PM | Evening check-in with pending habits |
+
+---
+
+*Last updated: February 8, 2026 - v2.1.0*
