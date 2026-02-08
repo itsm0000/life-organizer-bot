@@ -4,7 +4,7 @@ ADHD-friendly brain dump bot with AI categorization
 """
 import os
 import logging
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, MenuButtonWebApp
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -169,6 +169,16 @@ def add_xp(user_id: int, amount: int, reason: str = "") -> dict:
         user["xp"] += 50
         logger.info(f"User {user_id} got 7-day streak bonus! +50 XP")
     
+    # Save to file for persistence
+    try:
+        import json
+        with open("user_data.json", "w") as f:
+            # Convert default dict to regular dict for JSON serialization
+            data_to_save = {str(k): v for k, v in _user_xp.items()}
+            json.dump(data_to_save, f)
+    except Exception as e:
+        logger.error(f"Failed to save user data: {e}")
+    
     logger.info(f"User {user_id}: +{amount} XP ({reason}). Total: {user['xp']}")
     return user
 
@@ -185,6 +195,17 @@ logger = logging.getLogger(__name__)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send a message when the command /start is issued."""
     user = update.effective_user
+    
+    # Set the persistent menu button to open the dashboard
+    dashboard_url = os.getenv("DASHBOARD_URL", "https://life-organizer-widgets.up.railway.app")
+    try:
+        await context.bot.set_chat_menu_button(
+            chat_id=update.effective_chat.id,
+            menu_button=MenuButtonWebApp(text="📊 Dashboard", web_app=WebAppInfo(url=dashboard_url))
+        )
+    except Exception as e:
+        logger.error(f"Failed to set menu button: {e}")
+
     await update.message.reply_text(
         f"Hey {user.first_name}! 👋\n\n"
         "I'm your Life Organizer Bot. Just dump anything on your mind:\n\n"
@@ -193,8 +214,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📄 PDFs/Documents\n"
         "🎤 Voice notes\n\n"
         "I'll automatically categorize and organize everything in your Notion workspace.\n\n"
+        "**New:** Tap the '📊 Dashboard' button next to your text input to see your stats!\n\n"
         "Commands:\n"
         "/active - See what you're currently working on\n"
+        "/dashboard - Open the visual dashboard\n"
         "/help - Get help"
     )
 
@@ -1495,18 +1518,16 @@ def main():
                         "completed": completed_today
                     })
                 
-                # Get user stats from file
-                user_data = {}
-                if os.path.exists("user_data.json"):
-                    with open("user_data.json", "r") as f:
-                        user_data = json_module.load(f)
+                # Get user stats (prefer in-memory for real-time updates)
+                user_data_source = _user_xp
                 
                 # Default to first user or empty
-                user_str = list(user_data.keys())[0] if user_data else "0"
-                stats = user_data.get(user_str, {"xp": 0, "streak": 0})
+                user_ids = list(user_data_source.keys())
+                user_id = user_ids[0] if user_ids else 0
+                stats = user_data_source[user_id]
                 
-                xp = stats.get("xp", 0)
-                streak = stats.get("streak", 0)
+                xp = stats["xp"]
+                streak = stats["streak"]
                 level, level_title = get_level(xp)
                 
                 # Calculate level progress
