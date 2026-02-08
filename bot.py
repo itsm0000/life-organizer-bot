@@ -28,6 +28,10 @@ from notion_integration import (
     add_to_life_areas, add_to_brain_dump, log_progress, get_active_items,
     search_items, update_item, delete_item, get_items_by_category, format_item_for_display
 )
+from habits import (
+    get_habits, create_habit, complete_habit, get_habit_by_name,
+    format_habit_for_display, get_habit_xp, get_habit_name, get_habit_category
+)
 from voice_transcriber import transcribe_voice
 
 # Store pending delete confirmations {user_id: page_id}
@@ -509,6 +513,49 @@ async def shopping_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @secure
+async def habits_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """List all active habits with completion status"""
+    habits = get_habits(active_only=True)
+    
+    if not habits:
+        await update.message.reply_text(
+            "🔁 *No habits yet!*\n\n"
+            "Add one via Notion or ask me to create habits database.",
+            parse_mode="Markdown"
+        )
+        return
+    
+    # Group by completion status
+    done_today = []
+    pending = []
+    
+    for habit in habits:
+        formatted = format_habit_for_display(habit)
+        if formatted.startswith("✅"):
+            done_today.append(formatted)
+        else:
+            pending.append(formatted)
+    
+    # Build response
+    response = "🔁 *Your Habits*\n\n"
+    
+    if pending:
+        response += "⏳ *Pending Today:*\n"
+        for h in pending:
+            response += f"  {h}\n"
+        response += "\n"
+    
+    if done_today:
+        response += "✅ *Completed Today:*\n"
+        for h in done_today:
+            response += f"  {h}\n"
+    
+    response += f"\n📊 {len(done_today)}/{len(habits)} done today"
+    
+    await update.message.reply_text(response, parse_mode="Markdown")
+
+
+@secure
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle text messages - both new items and task management"""
     text = update.message.text
@@ -657,7 +704,25 @@ async def handle_management_command(update: Update, intent: dict, user_id: int):
     
     elif action == "complete":
         if update_item(page_id, {"status": "Done"}):
-            await update.message.reply_text(f"✅ Marked *{title}* as Done!", parse_mode="Markdown")
+            # Get category for progress logging
+            category = item["properties"].get("Category", {}).get("select", {})
+            category_name = category.get("name", "General") if category else "General"
+            
+            # Log to Progress Tracker
+            log_progress(
+                activity=f"Completed: {title}",
+                category=category_name,
+                notes="Marked done via bot"
+            )
+            
+            # Award XP
+            user_data = add_xp(user_id, 25, f"task_complete:{title}")
+            xp_msg = f"\n🎮 +25 XP | Total: {user_data['xp']} | Streak: {user_data['streak']}🔥"
+            
+            await update.message.reply_text(
+                f"✅ Marked *{title}* as Done!{xp_msg}\n📊 Progress logged!",
+                parse_mode="Markdown"
+            )
         else:
             await update.message.reply_text("❌ Failed to update. Try again.")
     
@@ -1120,6 +1185,9 @@ def main():
     application.add_handler(CommandHandler("work", work_command))
     application.add_handler(CommandHandler("ideas", ideas_command))
     application.add_handler(CommandHandler("shopping", shopping_command))
+    
+    # Habits (recurring tasks)
+    application.add_handler(CommandHandler("habits", habits_command))
     
     # Focus Mode (must be before generic text handler)
     application.add_handler(focus_handler)
