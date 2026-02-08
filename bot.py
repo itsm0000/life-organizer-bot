@@ -1446,16 +1446,114 @@ def main():
     port = int(os.getenv("PORT", 8443))
     
     if railway_domain:
-        # Production: Use webhook mode for Railway
+        # Production: Use webhook mode for Railway with custom API routes
         webhook_url = f"https://{railway_domain}"
         logger.info(f"Running in WEBHOOK mode on port {port}")
         logger.info(f"Webhook URL: {webhook_url}")
+        
+        # Custom API routes using starlette
+        from starlette.applications import Starlette
+        from starlette.responses import JSONResponse, Response
+        from starlette.routing import Route
+        import json as json_module
+        
+        async def api_dashboard(request):
+            """API endpoint for dashboard data"""
+            # CORS headers
+            headers = {
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Content-Type, X-Telegram-Init-Data",
+                "Access-Control-Allow-Methods": "GET, OPTIONS"
+            }
+            
+            if request.method == "OPTIONS":
+                return Response(status_code=200, headers=headers)
+            
+            try:
+                # Get habits
+                habits_list = get_habits(active_only=True) or []
+                habits_data = []
+                for habit in habits_list:
+                    name = get_habit_name(habit)
+                    xp = get_habit_xp(habit)
+                    category = get_habit_category(habit)
+                    
+                    # Check if completed today
+                    props = habit.get("properties", {})
+                    last_completed = props.get("Last Completed", {}).get("date", {})
+                    completed_today = False
+                    if last_completed:
+                        last_date = last_completed.get("start", "")
+                        if last_date:
+                            completed_today = last_date[:10] == datetime.now().strftime("%Y-%m-%d")
+                    
+                    habits_data.append({
+                        "id": habit.get("id"),
+                        "name": name,
+                        "xp": xp,
+                        "category": category,
+                        "completed": completed_today
+                    })
+                
+                # Get user stats from file
+                user_data = {}
+                if os.path.exists("user_data.json"):
+                    with open("user_data.json", "r") as f:
+                        user_data = json_module.load(f)
+                
+                # Default to first user or empty
+                user_str = list(user_data.keys())[0] if user_data else "0"
+                stats = user_data.get(user_str, {"xp": 0, "streak": 0})
+                
+                xp = stats.get("xp", 0)
+                streak = stats.get("streak", 0)
+                level, level_title = get_level(xp)
+                
+                # Calculate level progress
+                level_thresholds = [0, 50, 150, 350, 600, 1000, 2000, 5000]
+                current_threshold = level_thresholds[min(level - 1, len(level_thresholds) - 1)]
+                next_threshold = level_thresholds[min(level, len(level_thresholds) - 1)]
+                level_progress = (xp - current_threshold) / max(next_threshold - current_threshold, 1)
+                
+                # Get active tasks count
+                active_items = get_active_items() or []
+                tasks_total = len(active_items)
+                tasks_done = len([i for i in active_items 
+                    if i.get("properties", {}).get("Status", {}).get("status", {}).get("name") == "Done"])
+                
+                response_data = {
+                    "habits": habits_data,
+                    "xp": xp,
+                    "level": level,
+                    "levelTitle": level_title,
+                    "levelProgress": min(level_progress, 1.0),
+                    "streak": streak,
+                    "tasksToday": tasks_total,
+                    "tasksCompleted": tasks_done
+                }
+                
+                return JSONResponse(response_data, headers=headers)
+                
+            except Exception as e:
+                logger.error(f"Dashboard API error: {e}")
+                return JSONResponse({"error": str(e)}, status_code=500, headers=headers)
+        
+        async def health_check(request):
+            return JSONResponse({"status": "ok"})
+        
+        # Create custom starlette routes
+        custom_routes = [
+            Route("/api/dashboard", api_dashboard, methods=["GET", "OPTIONS"]),
+            Route("/health", health_check),
+        ]
         
         application.run_webhook(
             listen="0.0.0.0",
             port=port,
             webhook_url=webhook_url,
             allowed_updates=Update.ALL_TYPES,
+            http_version="1.1",
+            other_routes=custom_routes,
         )
     else:
         # Local development: Use polling mode
