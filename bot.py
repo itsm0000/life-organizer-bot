@@ -4,7 +4,7 @@ ADHD-friendly brain dump bot with AI categorization
 """
 import os
 import logging
-from telegram import Update
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -218,6 +218,28 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/stats - 📊 Your XP & level\n"
         "/weekly - 📅 Weekly review\n"
         "/help - This message",
+        parse_mode="Markdown"
+    )
+
+
+@secure
+async def dashboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Open the visual dashboard Mini App"""
+    # Get the Mini App URL from environment or use default
+    dashboard_url = os.getenv("DASHBOARD_URL", "https://life-organizer-widgets.up.railway.app")
+    
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton(
+            "📊 Open Dashboard",
+            web_app=WebAppInfo(url=dashboard_url)
+        )]
+    ])
+    
+    await update.message.reply_text(
+        "🎮 *Visual Dashboard*\n\n"
+        "Track your habits, XP, streak, and tasks at a glance!\n\n"
+        "Tap the button below to open:",
+        reply_markup=keyboard,
         parse_mode="Markdown"
     )
 
@@ -1372,6 +1394,9 @@ def main():
     
     # Habits (recurring tasks)
     application.add_handler(CommandHandler("habits", habits_command))
+    
+    # Visual Dashboard (Mini App)
+    application.add_handler(CommandHandler("dashboard", dashboard_command))
     
     # Focus Mode (must be before generic text handler)
     application.add_handler(focus_handler)
