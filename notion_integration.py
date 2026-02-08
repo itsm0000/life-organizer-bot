@@ -13,8 +13,28 @@ notion = Client(auth=os.getenv("NOTION_TOKEN"))
 
 
 def add_to_life_areas(category, title, item_type, priority, notes="", image_url=None):
-    """Add an item to the Life Areas database"""
+    """Add an item to the Life Areas database with visual styling"""
     db_id = os.getenv("LIFE_AREAS_DB_ID")
+    
+    # Category-specific emoji icons for visual appeal
+    CATEGORY_ICONS = {
+        "Health": "💪",
+        "Study": "📚",
+        "Work": "💼",
+        "Ideas": "💡",
+        "Shopping": "🛒",
+        "Skills": "🎯",
+        "Finance": "💰",
+        "Social": "👥",
+        "Personal": "🌟",
+    }
+    
+    # Priority-based gradient cover images (Unsplash URLs - free to use)
+    PRIORITY_COVERS = {
+        "High": "https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=1200",  # Purple gradient
+        "Medium": "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=1200",  # Colorful gradient
+        "Low": "https://images.unsplash.com/photo-1558591710-4b4a1ae0f04d?w=1200",  # Soft gradient
+    }
     
     properties = {
         "Name": {"title": [{"text": {"content": title}}]},
@@ -31,8 +51,17 @@ def add_to_life_areas(category, title, item_type, priority, notes="", image_url=
     if image_url:
         properties["Image"] = {"files": [{"name": "Image", "external": {"url": image_url}}]}
     
+    # Get icon and cover for visual appeal
+    icon_emoji = CATEGORY_ICONS.get(category, "📌")
+    cover_url = PRIORITY_COVERS.get(priority, PRIORITY_COVERS["Medium"])
+    
     try:
-        page = notion.pages.create(parent={"database_id": db_id}, properties=properties)
+        page = notion.pages.create(
+            parent={"database_id": db_id}, 
+            properties=properties,
+            icon={"type": "emoji", "emoji": icon_emoji},
+            cover={"type": "external", "external": {"url": cover_url}}
+        )
         return page["id"]
     except Exception as e:
         print(f"Error adding to Life Areas: {e}")
@@ -40,8 +69,18 @@ def add_to_life_areas(category, title, item_type, priority, notes="", image_url=
 
 
 def add_to_brain_dump(title, content, msg_type, file_url=None):
-    """Add an item to the Brain Dump inbox"""
+    """Add an item to the Brain Dump inbox with visual styling"""
     db_id = os.getenv("BRAIN_DUMP_DB_ID")
+    
+    # Type-based icons for visual appeal
+    TYPE_ICONS = {
+        "text": "💭",
+        "voice": "🎤",
+        "photo": "📸",
+        "document": "📄",
+        "idea": "💡",
+        "reminder": "⏰",
+    }
     
     properties = {
         "Name": {"title": [{"text": {"content": title}}]},
@@ -54,8 +93,14 @@ def add_to_brain_dump(title, content, msg_type, file_url=None):
     if file_url:
         properties["Files"] = {"files": [{"name": "Attachment", "external": {"url": file_url}}]}
     
+    icon_emoji = TYPE_ICONS.get(msg_type, "📝")
+    
     try:
-        page = notion.pages.create(parent={"database_id": db_id}, properties=properties)
+        page = notion.pages.create(
+            parent={"database_id": db_id}, 
+            properties=properties,
+            icon={"type": "emoji", "emoji": icon_emoji}
+        )
         return page["id"]
     except Exception as e:
         print(f"Error adding to Brain Dump: {e}")
