@@ -5,3 +5,4 @@ Pillow>=10.4.0
 requests>=2.31.0
 httpx>=0.25.0
 starlette>=0.32.0
+uvicorn>=0.25.0

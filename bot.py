@@ -1541,20 +1541,49 @@ def main():
         async def health_check(request):
             return JSONResponse({"status": "ok"})
         
+        # Create Starlette app with custom routes
+        async def telegram_webhook(request):
+            """Handle incoming Telegram updates"""
+            try:
+                data = await request.json()
+                update = Update.de_json(data, application.bot)
+                await application.process_update(update)
+                return Response(status_code=200)
+            except Exception as e:
+                logger.error(f"Webhook error: {e}")
+                return Response(status_code=500)
+
         # Create custom starlette routes
-        custom_routes = [
+        routes = [
+            Route("/", telegram_webhook, methods=["POST"]),
             Route("/api/dashboard", api_dashboard, methods=["GET", "OPTIONS"]),
-            Route("/health", health_check),
+            Route("/health", health_check, methods=["GET"]),
         ]
         
-        application.run_webhook(
-            listen="0.0.0.0",
-            port=port,
-            webhook_url=webhook_url,
-            allowed_updates=Update.ALL_TYPES,
-            http_version="1.1",
-            other_routes=custom_routes,
-        )
+        starlette_app = Starlette(routes=routes)
+        
+        # Run using uvicorn directly
+        import uvicorn
+        
+        # We need to initialize the application first
+        async def run_server():
+            await application.initialize()
+            await application.start()
+            await application.bot.set_webhook(url=webhook_url)
+            
+            config = uvicorn.Config(
+                app=starlette_app,
+                port=port,
+                host="0.0.0.0"
+            )
+            server = uvicorn.Server(config)
+            await server.serve()
+            
+            await application.stop()
+            await application.shutdown()
+
+        # Run the async server
+        asyncio.run(run_server())
     else:
         # Local development: Use polling mode
         logger.info("Running in POLLING mode (local development)")
