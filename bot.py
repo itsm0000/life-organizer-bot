@@ -954,7 +954,21 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         logger.info(f"Transcription: {transcription[:100]}...")
         
-        # First check if this is a management command
+        # First check if this is a habit-related command (create or complete)
+        logger.info("Checking for habit intent in voice...")
+        habit_intent = await parse_habit_intent(transcription)
+        logger.info(f"Voice habit intent: {habit_intent}")
+        
+        if habit_intent.get("intent") == "create_habit":
+            await handle_habit_create(update, habit_intent, user.id)
+            await update.message.reply_text(f"🎤 \"{transcription}\"")
+            return
+        elif habit_intent.get("intent") == "complete_habit":
+            await handle_habit_complete(update, habit_intent, user.id)
+            await update.message.reply_text(f"🎤 \"{transcription}\"")
+            return
+        
+        # Next check if this is a management command
         logger.info("Checking for management intent in voice...")
         intent = await parse_management_intent(transcription)
         logger.info(f"Voice management intent: {intent}")
