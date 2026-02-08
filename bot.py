@@ -111,6 +111,20 @@ from datetime import datetime, timedelta
 # In-memory XP storage (persists via Notion Progress DB for durability)
 _user_xp = defaultdict(lambda: {"xp": 0, "last_action": None, "streak": 0})
 
+def load_xp_data():
+    """Load XP data from JSON file."""
+    if os.path.exists("user_data.json"):
+        try:
+            import json
+            with open("user_data.json", "r") as f:
+                data = json.load(f)
+                # Convert string keys back to int for memory storage
+                for k, v in data.items():
+                    _user_xp[int(k)] = v
+            logger.info(f"Loaded XP data for {len(_user_xp)} users")
+        except Exception as e:
+            logger.error(f"Failed to load user data: {e}")
+
 # XP rewards
 XP_TASK_ADDED = 5
 XP_TASK_COMPLETED = 15
@@ -1398,6 +1412,9 @@ async def evening_habits_callback(context):
 
 def main():
     """Start the bot"""
+    # Load XP data
+    load_xp_data()
+
     # Create the Application
     application = Application.builder().token(os.getenv("TELEGRAM_BOT_TOKEN")).build()
     
@@ -1521,9 +1538,25 @@ def main():
                 # Get user stats (prefer in-memory for real-time updates)
                 user_data_source = _user_xp
                 
-                # Default to first user or empty
-                user_ids = list(user_data_source.keys())
-                user_id = user_ids[0] if user_ids else 0
+                # Identify user from Telegram Init Data
+                user_id = 0
+                init_data = request.headers.get("X-Telegram-Init-Data", "")
+                if init_data:
+                    try:
+                        from urllib.parse import parse_qs
+                        import json
+                        parsed = parse_qs(init_data)
+                        user_json_str = parsed.get("user", ["{}"])[0]
+                        user_obj = json.loads(user_json_str)
+                        user_id = int(user_obj.get("id", 0))
+                    except Exception as e:
+                        logger.error(f"Auth parsing error: {e}")
+                
+                # Fallback: only if we couldn't identify user, pick first one (dev mode)
+                if user_id == 0 and user_data_source:
+                    user_id = list(user_data_source.keys())[0]
+                
+                # Retrieve stats (defaultdict handles new users automatically)
                 stats = user_data_source[user_id]
                 
                 xp = stats["xp"]
