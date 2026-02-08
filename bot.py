@@ -220,7 +220,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @secure
 async def active_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show active items from Notion"""
+    """Show active items from Notion with pagination"""
     await update.message.reply_text("🔍 Fetching your active items...")
     
     items = get_active_items()
@@ -231,23 +231,75 @@ async def active_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
+    # Store items in context for pagination
+    context.user_data["active_items"] = items
+    context.user_data["active_page"] = 0
+    
+    await send_paginated_active(update.message, context, items, 0)
+
+
+async def send_paginated_active(message_or_query, context, items, page, is_edit=False):
+    """Send paginated active items list."""
+    per_page = 5
+    total_pages = (len(items) + per_page - 1) // per_page
+    start = page * per_page
+    end = min(start + per_page, len(items))
+    page_items = items[start:end]
+    
     # Group by category
     by_category = {}
-    for item in items[:10]:  # Limit to 10 most important
+    for item in page_items:
         props = item["properties"]
         category = props.get("Category", {}).get("select", {}).get("name", "Other")
         title = props.get("Name", {}).get("title", [{}])[0].get("plain_text", "Untitled")
         priority = props.get("Priority", {}).get("select", {}).get("name", "Medium")
+        p_icon = {"🔴": "High", "🟡": "Medium", "🟢": "Low"}.get(priority, "⚪")
+        # Reverse lookup
+        p_icon = {"High": "🔴", "Medium": "🟡", "Low": "🟢"}.get(priority, "⚪")
         
         if category not in by_category:
             by_category[category] = []
-        by_category[category].append(f"  • {title} [{priority}]")
+        by_category[category].append(f"  {p_icon} {title}")
     
-    message = "📋 *Your Active Items:*\n\n"
+    text = f"📋 *Active Items* (Page {page + 1}/{total_pages})\n\n"
     for category, items_list in by_category.items():
-        message += f"*{category}:*\n" + "\n".join(items_list) + "\n\n"
+        text += f"*{category}:*\n" + "\n".join(items_list) + "\n\n"
+    text += f"_{len(items)} total items_"
     
-    await update.message.reply_text(message, parse_mode="Markdown")
+    # Build pagination keyboard
+    nav_buttons = []
+    if page > 0:
+        nav_buttons.append(InlineKeyboardButton("◀️", callback_data=f"active_page_{page-1}"))
+    nav_buttons.append(InlineKeyboardButton(f"{page+1}/{total_pages}", callback_data="noop"))
+    if end < len(items):
+        nav_buttons.append(InlineKeyboardButton("▶️", callback_data=f"active_page_{page+1}"))
+    
+    keyboard = InlineKeyboardMarkup([nav_buttons]) if len(nav_buttons) > 1 else None
+    
+    if is_edit:
+        await message_or_query.edit_message_text(text, parse_mode="Markdown", reply_markup=keyboard)
+    else:
+        await message_or_query.reply_text(text, parse_mode="Markdown", reply_markup=keyboard)
+
+
+async def handle_active_pagination(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle pagination callback for /active command."""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "noop":
+        return
+    
+    # Parse page number
+    page = int(query.data.replace("active_page_", ""))
+    items = context.user_data.get("active_items", [])
+    
+    if not items:
+        await query.edit_message_text("Session expired. Use /active again.")
+        return
+    
+    context.user_data["active_page"] = page
+    await send_paginated_active(query, context, items, page, is_edit=True)
 
 
 @secure
@@ -361,7 +413,7 @@ CATEGORY_ICONS = {
 
 
 async def category_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, category: str):
-    """Generic handler for category commands."""
+    """Generic handler for category commands with pagination."""
     items = get_items_by_category(category)
     icon = CATEGORY_ICONS.get(category, "📂")
     
@@ -369,15 +421,70 @@ async def category_command_handler(update: Update, context: ContextTypes.DEFAULT
         await update.message.reply_text(f"{icon} No active items in *{category}*", parse_mode="Markdown")
         return
     
-    response = f"{icon} *{category}* ({len(items)} items)\n\n"
-    for item in items[:10]:
+    # Store for pagination
+    context.user_data[f"cat_{category}_items"] = items
+    context.user_data[f"cat_{category}_page"] = 0
+    
+    await send_paginated_category(update.message, context, items, category, 0)
+
+
+async def send_paginated_category(message_or_query, context, items, category, page, is_edit=False):
+    """Send paginated category items list."""
+    per_page = 5
+    total_pages = (len(items) + per_page - 1) // per_page
+    start = page * per_page
+    end = min(start + per_page, len(items))
+    page_items = items[start:end]
+    
+    icon = CATEGORY_ICONS.get(category, "📂")
+    text = f"{icon} *{category}* ({len(items)} items, Page {page + 1}/{total_pages})\n\n"
+    
+    for item in page_items:
         props = item.get("properties", {})
         title = props.get("Name", {}).get("title", [{}])[0].get("plain_text", "Untitled")
         priority = props.get("Priority", {}).get("select", {}).get("name", "Low")
         p_icon = {"High": "🔴", "Medium": "🟡", "Low": "🟢"}.get(priority, "⚪")
-        response += f"{p_icon} {title}\n"
+        text += f"{p_icon} {title}\n"
     
-    await update.message.reply_text(response, parse_mode="Markdown")
+    # Build pagination keyboard
+    nav_buttons = []
+    if page > 0:
+        nav_buttons.append(InlineKeyboardButton("◀️", callback_data=f"cat_{category}_{page-1}"))
+    nav_buttons.append(InlineKeyboardButton(f"{page+1}/{total_pages}", callback_data="noop"))
+    if end < len(items):
+        nav_buttons.append(InlineKeyboardButton("▶️", callback_data=f"cat_{category}_{page+1}"))
+    
+    keyboard = InlineKeyboardMarkup([nav_buttons]) if len(nav_buttons) > 1 else None
+    
+    if is_edit:
+        await message_or_query.edit_message_text(text, parse_mode="Markdown", reply_markup=keyboard)
+    else:
+        await message_or_query.reply_text(text, parse_mode="Markdown", reply_markup=keyboard)
+
+
+async def handle_category_pagination(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle pagination callback for category commands."""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "noop":
+        return
+    
+    # Parse category and page: cat_Health_1
+    parts = query.data.split("_")
+    if len(parts) < 3:
+        return
+    
+    category = parts[1]
+    page = int(parts[2])
+    items = context.user_data.get(f"cat_{category}_items", [])
+    
+    if not items:
+        await query.edit_message_text("Session expired. Use category command again.")
+        return
+    
+    context.user_data[f"cat_{category}_page"] = page
+    await send_paginated_category(query, context, items, category, page, is_edit=True)
 
 
 @secure
@@ -762,6 +869,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 FOCUS_CHOOSING, FOCUS_ACTIVE = range(2)
 _focus_sessions = {}  # {user_id: {"task": task_name, "page_id": page_id}}
+_focus_pending_tasks = defaultdict(list)  # {user_id: [task_texts]} - tasks queued during focus mode
 
 
 @secure
@@ -854,12 +962,15 @@ async def focus_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def focus_complete(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Complete the focused task."""
+    """Complete the focused task or queue new tasks."""
     user_id = update.effective_user.id
-    text = update.message.text.lower()
+    text = update.message.text
+    text_lower = text.lower()
     
-    if text in ["done", "finished", "complete", "تم", "خلص"]:
+    if text_lower in ["done", "finished", "complete", "تم", "خلص"]:
         session = _focus_sessions.pop(user_id, None)
+        pending_tasks = _focus_pending_tasks.pop(user_id, [])
+        
         if session:
             # Mark task as done in Notion
             update_item(session["page_id"], {"status": "Done"})
@@ -868,22 +979,57 @@ async def focus_complete(update: Update, context: ContextTypes.DEFAULT_TYPE):
             stats = add_xp(user_id, XP_FOCUS_COMPLETED, "focus mode completion")
             level, title = get_level(stats["xp"])
             
-            await update.message.reply_text(
+            completion_msg = (
                 f"🎉 *AMAZING!*\n\n"
                 f"You crushed it! ✅ *{session['task']}* is DONE!\n\n"
-                f"+{XP_FOCUS_COMPLETED} XP 💫 (Level {level}: {title})\n\n"
-                f"Take a breather, then /focus on the next one.",
-                parse_mode="Markdown"
+                f"+{XP_FOCUS_COMPLETED} XP 💫 (Level {level}: {title})"
             )
+            
+            # Process any queued tasks
+            if pending_tasks:
+                completion_msg += f"\n\n📝 Processing {len(pending_tasks)} queued task(s)..."
+            
+            await update.message.reply_text(completion_msg, parse_mode="Markdown")
+            
+            # Add queued tasks to Notion
+            for queued_text in pending_tasks:
+                try:
+                    result = await categorize_message(queued_text)
+                    notion_id = add_to_life_areas(
+                        category=result["category"],
+                        title=result["title"],
+                        item_type=result["type"],
+                        priority=result["priority"],
+                        notes=result["summary"]
+                    )
+                    if notion_id:
+                        await update.message.reply_text(
+                            f"✅ Added: *{result['title']}* → {result['category']}",
+                            parse_mode="Markdown"
+                        )
+                        add_xp(user_id, XP_TASK_ADDED, "added queued task")
+                except Exception as e:
+                    logger.error(f"Error processing queued task: {e}")
+                    await update.message.reply_text(f"⚠️ Failed to add: {queued_text[:30]}...")
+            
+            if pending_tasks:
+                await update.message.reply_text("Take a breather, then /focus on the next one. 💪")
         else:
             await update.message.reply_text("No active focus session. Start with /focus")
         return ConversationHandler.END
     
-    # User is chatting while in focus mode - gentle reminder
+    # User sent something while in focus mode - queue it as a new task
     session = _focus_sessions.get(user_id, {})
     task = session.get("task", "your task")
+    
+    # Queue the text as a pending task (it will be processed after focus ends)
+    _focus_pending_tasks[user_id].append(text)
+    pending_count = len(_focus_pending_tasks[user_id])
+    
     await update.message.reply_text(
-        f"🧘 Still in Focus Mode on: *{task}*\n\n"
+        f"📝 Noted! I'll add this after you're done focusing.\n\n"
+        f"🧘 Still in Focus Mode on: *{task}*\n"
+        f"📋 {pending_count} task(s) queued\n\n"
         f"Say *done* when finished, or /cancel to exit.",
         parse_mode="Markdown"
     )
@@ -891,10 +1037,16 @@ async def focus_complete(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def focus_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Cancel focus mode."""
+    """Cancel focus mode and discard queued tasks."""
     user_id = update.effective_user.id
     _focus_sessions.pop(user_id, None)
-    await update.message.reply_text("Focus mode ended. No worries, you can try again anytime! 💪")
+    pending_count = len(_focus_pending_tasks.pop(user_id, []))
+    
+    cancel_msg = "Focus mode ended. No worries, you can try again anytime! 💪"
+    if pending_count > 0:
+        cancel_msg += f"\n\n⚠️ {pending_count} queued task(s) discarded."
+    
+    await update.message.reply_text(cancel_msg)
     return ConversationHandler.END
 
 
@@ -971,6 +1123,10 @@ def main():
     
     # Focus Mode (must be before generic text handler)
     application.add_handler(focus_handler)
+    
+    # Pagination callback handlers for /active and category views
+    application.add_handler(CallbackQueryHandler(handle_active_pagination, pattern="^active_page_|^noop$"))
+    application.add_handler(CallbackQueryHandler(handle_category_pagination, pattern="^cat_"))
     
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))

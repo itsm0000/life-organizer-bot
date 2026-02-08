@@ -36,6 +36,8 @@ async def transcribe_voice(audio_bytes: bytes, filename: str = "voice.ogg") -> s
             data = {
                 "model": "whisper-large-v3",
                 "response_format": "text",
+                "language": "ar",  # Force Arabic to prevent misdetection with dialects
+                "prompt": "مهمة، تذكير، اتصل، اشتري، ادرس، تمرين، موعد، لازم، اريد، ابي",  # Common Arabic task words
             }
             
             response = await client.post(
