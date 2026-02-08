@@ -125,6 +125,78 @@ async def parse_management_intent(message_text: str) -> dict:
         return {"intent": "none"}
 
 
+HABIT_PROMPT = """You are an AI assistant. Determine if the user is trying to:
+1. CREATE a recurring habit/routine (e.g., "add a skincare habit twice daily")
+2. COMPLETE/CHECK-OFF a habit they already have (e.g., "skincare done", "finished workout")
+3. NEITHER - just a regular message or task
+
+HABIT CREATE phrases include: "add a habit", "create routine", "daily habit", "recurring task", "twice a day", "every morning", etc.
+HABIT COMPLETE phrases include: "done", "finished", "completed", "checked off", "[habit name] done", etc.
+
+Respond ONLY with valid JSON:
+{
+  "intent": "create_habit" | "complete_habit" | "none",
+  "habit_name": "extracted habit name (e.g., 'Skincare Routine')",
+  "frequency": "Daily" | "Twice Daily" | "Weekly" | "Monthly" | null,
+  "times": ["Morning", "Evening"] | ["Morning"] | ["Evening"] | null,
+  "category": "Health" | "Study" | "Work" | "Personal" | "Skills" | null,
+  "xp_reward": 25
+}
+
+For COMPLETE, just extract the habit_name they're referring to.
+For CREATE, extract all details if mentioned, use sensible defaults if not."""
+
+
+async def parse_habit_intent(message_text: str) -> dict:
+    """
+    Determine if user wants to create or complete a habit
+    Returns intent type and habit details
+    """
+    if not GROQ_API_KEY:
+        return {"intent": "none"}
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                GROQ_API_URL,
+                headers={
+                    "Authorization": f"Bearer {GROQ_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [
+                        {"role": "system", "content": HABIT_PROMPT},
+                        {"role": "user", "content": message_text}
+                    ],
+                    "temperature": 0.1,
+                    "max_tokens": 300
+                },
+                timeout=30.0
+            )
+            
+            if response.status_code != 200:
+                print(f"Habit parse error: {response.status_code}")
+                return {"intent": "none"}
+            
+            data = response.json()
+            content = data["choices"][0]["message"]["content"]
+            
+            # Strip markdown if present
+            content = content.strip()
+            if content.startswith("```"):
+                lines = content.split("\n")
+                lines = lines[1:-1] if lines[-1].strip() == "```" else lines[1:]
+                content = "\n".join(lines)
+            
+            result = json.loads(content)
+            return result
+            
+    except Exception as e:
+        print(f"Habit parse error: {e}")
+        return {"intent": "none"}
+
+
 async def ai_match_task(user_request: str, tasks: list) -> dict:
     """
     Use AI to semantically match user's request to the best task from the list.

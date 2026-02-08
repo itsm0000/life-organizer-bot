@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 import asyncio
 
 # Import our modules
-from ai_categorizer import categorize_message, analyze_image, parse_management_intent, ai_match_task
+from ai_categorizer import categorize_message, analyze_image, parse_management_intent, ai_match_task, parse_habit_intent
 from notion_integration import (
     add_to_life_areas, add_to_brain_dump, log_progress, get_active_items,
     search_items, update_item, delete_item, get_items_by_category, format_item_for_display
@@ -581,7 +581,19 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     try:
-        # First, check if this is a management command
+        # First, check if this is a habit-related command (create or complete)
+        logger.info("Checking for habit intent...")
+        habit_intent = await parse_habit_intent(text)
+        logger.info(f"Habit intent: {habit_intent}")
+        
+        if habit_intent.get("intent") == "create_habit":
+            await handle_habit_create(update, habit_intent, user_id)
+            return
+        elif habit_intent.get("intent") == "complete_habit":
+            await handle_habit_complete(update, habit_intent, user_id)
+            return
+        
+        # Next, check if this is a management command
         logger.info("Checking for management intent...")
         intent = await parse_management_intent(text)
         logger.info(f"Management intent: {intent}")
@@ -638,6 +650,85 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 f"❌ Critical error: {str(e)}\nPlease check logs."
             )
+
+
+async def handle_habit_create(update: Update, habit_intent: dict, user_id: int):
+    """Handle creating a new habit from natural language"""
+    name = habit_intent.get("habit_name", "New Habit")
+    frequency = habit_intent.get("frequency", "Daily")
+    times = habit_intent.get("times")
+    category = habit_intent.get("category", "Personal")
+    xp_reward = habit_intent.get("xp_reward", 25)
+    
+    # Create the habit
+    habit_id = create_habit(
+        name=name,
+        frequency=frequency,
+        category=category,
+        times=times,
+        xp_reward=xp_reward
+    )
+    
+    if habit_id:
+        times_str = f" ({', '.join(times)})" if times else ""
+        await update.message.reply_text(
+            f"🔁 *Habit Created!*\n\n"
+            f"📝 {name}\n"
+            f"⏰ {frequency}{times_str}\n"
+            f"📂 {category}\n"
+            f"🎮 {xp_reward} XP per completion\n\n"
+            f"Say \"{name} done\" when you complete it!",
+            parse_mode="Markdown"
+        )
+    else:
+        await update.message.reply_text(
+            "❌ Failed to create habit. Make sure HABITS_DB_ID is set in Railway."
+        )
+
+
+async def handle_habit_complete(update: Update, habit_intent: dict, user_id: int):
+    """Handle completing a habit from natural language"""
+    habit_name = habit_intent.get("habit_name", "")
+    
+    if not habit_name:
+        await update.message.reply_text("🤔 Which habit did you complete?")
+        return
+    
+    # Find matching habit
+    habit = get_habit_by_name(habit_name)
+    
+    if not habit:
+        await update.message.reply_text(
+            f"🔍 Couldn't find a habit matching '{habit_name}'.\n\n"
+            f"💡 Use /habits to see your habits."
+        )
+        return
+    
+    # Mark as completed
+    habit_id = habit.get("id")
+    if complete_habit(habit_id):
+        name = get_habit_name(habit)
+        xp = get_habit_xp(habit)
+        category = get_habit_category(habit)
+        
+        # Log to progress
+        log_progress(
+            activity=f"Habit: {name}",
+            category=category,
+            notes="Daily habit completed"
+        )
+        
+        # Award XP
+        user_data = add_xp(user_id, xp, f"habit_complete:{name}")
+        
+        await update.message.reply_text(
+            f"✅ *{name}* done!\n\n"
+            f"🎮 +{xp} XP | Total: {user_data['xp']} | Streak: {user_data['streak']}🔥\n"
+            f"📊 Progress logged!",
+            parse_mode="Markdown"
+        )
+    else:
+        await update.message.reply_text("❌ Failed to mark habit as complete.")
 
 
 async def handle_management_command(update: Update, intent: dict, user_id: int):
@@ -1167,6 +1258,85 @@ async def daily_nudge_callback(context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"Failed to send nudge to {user_id}: {e}")
 
 
+async def daily_nudge_callback(context):
+    """Send daily nudge to all users"""
+    message = "🌅 *Good morning!*\n\nUse /habits to see today's habits.\nUse /active to see your tasks."
+    
+    for user_id in ALLOWED_USER_IDS:
+        if user_id == 0:
+            continue
+        try:
+            await context.bot.send_message(chat_id=user_id, text=message, parse_mode="Markdown")
+        except Exception as e:
+            logger.error(f"Failed to send daily nudge to {user_id}: {e}")
+
+
+async def morning_habits_callback(context):
+    """Send morning habit reminder"""
+    for user_id in ALLOWED_USER_IDS:
+        if user_id == 0:
+            continue
+        try:
+            # Get morning habits
+            habits = get_habits(active_only=True, time_of_day="Morning")
+            if not habits:
+                # Also get daily habits without specific times
+                habits = get_habits(active_only=True, frequency="Daily")
+            
+            if not habits:
+                continue  # No habits to remind about
+            
+            # Build message
+            message = "🌅 *Good Morning!*\n\n⏳ *Today's Habits:*\n"
+            total_xp = 0
+            for habit in habits:
+                formatted = format_habit_for_display(habit)
+                message += f"  {formatted}\n"
+                total_xp += get_habit_xp(habit)
+            
+            message += f"\n🎮 Potential XP: {total_xp}\n\nSay \"[habit] done\" when complete!"
+            
+            await context.bot.send_message(chat_id=user_id, text=message, parse_mode="Markdown")
+        except Exception as e:
+            logger.error(f"Failed to send morning habits to {user_id}: {e}")
+
+
+async def evening_habits_callback(context):
+    """Send evening habit reminder"""
+    for user_id in ALLOWED_USER_IDS:
+        if user_id == 0:
+            continue
+        try:
+            # Get evening habits
+            habits = get_habits(active_only=True, time_of_day="Evening")
+            
+            if not habits:
+                continue  # No evening habits
+            
+            # Count completed today
+            done_count = 0
+            pending = []
+            for habit in habits:
+                formatted = format_habit_for_display(habit)
+                if formatted.startswith("✅"):
+                    done_count += 1
+                else:
+                    pending.append(formatted)
+            
+            if not pending:
+                # All done!
+                message = f"🌙 *Evening Check-in*\n\n✅ All {done_count} habits complete! Great job! 🎉"
+            else:
+                message = "🌙 *Evening Reminder*\n\n⏳ *Still pending:*\n"
+                for p in pending:
+                    message += f"  {p}\n"
+                message += f"\n✅ Completed: {done_count}/{len(habits)}"
+            
+            await context.bot.send_message(chat_id=user_id, text=message, parse_mode="Markdown")
+        except Exception as e:
+            logger.error(f"Failed to send evening habits to {user_id}: {e}")
+
+
 def main():
     """Start the bot"""
     # Create the Application
@@ -1212,6 +1382,22 @@ def main():
             name="daily_nudge"
         )
         logger.info("Scheduled daily nudge for 10:00 AM")
+        
+        # Morning habit reminder at 8 AM (Iraq time = UTC+3)
+        job_queue.run_daily(
+            morning_habits_callback,
+            time=dt_time(hour=5, minute=0),  # 5 AM UTC = 8 AM Iraq
+            name="morning_habits"
+        )
+        logger.info("Scheduled morning habits reminder for 8:00 AM Iraq time")
+        
+        # Evening habit reminder at 8 PM (Iraq time = UTC+3)
+        job_queue.run_daily(
+            evening_habits_callback,
+            time=dt_time(hour=17, minute=0),  # 5 PM UTC = 8 PM Iraq
+            name="evening_habits"
+        )
+        logger.info("Scheduled evening habits reminder for 8:00 PM Iraq time")
     
     # Start the Bot
     logger.info("Starting Life Organizer Bot...")
