@@ -237,6 +237,36 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @secure
+async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Debug XP data"""
+    try:
+        user_id = update.effective_user.id
+        xp_mem = _user_xp.get(user_id, "Not found")
+        
+        file_status = "Missing"
+        file_data = "{}"
+        if os.path.exists("user_data.json"):
+            file_status = "Exists"
+            try:
+                with open("user_data.json", "r") as f:
+                    file_data = f.read()
+            except: 
+                file_data = "Error reading"
+        
+        # Safe preview
+        preview = file_data[:100] + "..." if len(file_data) > 100 else file_data
+        
+        await update.message.reply_text(
+            f"🔍 **Debug Info**\n"
+            f"User ID: `{user_id}`\n"
+            f"Memory XP: `{xp_mem}`\n"
+            f"File: {file_status}\n"
+            f"File Content: `{preview}`"
+        )
+    except Exception as e:
+        await update.message.reply_text(f"Error: {e}")
+
+@secure
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send a message when the command /help is issued."""
     await update.message.reply_text(
@@ -1437,6 +1467,7 @@ def main():
     
     # Visual Dashboard (Mini App)
     application.add_handler(CommandHandler("dashboard", dashboard_command))
+    application.add_handler(CommandHandler("debug", debug_command))
     
     # Focus Mode (must be before generic text handler)
     application.add_handler(focus_handler)
