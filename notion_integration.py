@@ -29,11 +29,11 @@ def add_to_life_areas(category, title, item_type, priority, notes="", image_url=
         "Personal": "🌟",
     }
     
-    # Priority-based gradient cover images (Unsplash URLs - free to use)
+    # Priority-based animated gradient GIF covers for visual appeal
     PRIORITY_COVERS = {
-        "High": "https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=1200",  # Purple gradient
-        "Medium": "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=1200",  # Colorful gradient
-        "Low": "https://images.unsplash.com/photo-1558591710-4b4a1ae0f04d?w=1200",  # Soft gradient
+        "High": "https://media.giphy.com/media/l0HlBO7eyXzSZkJri/giphy.gif",  # Animated purple
+        "Medium": "https://media.giphy.com/media/3o7TKSjRrfIPjeYFEc/giphy.gif",  # Animated gradient
+        "Low": "https://media.giphy.com/media/xTiTnxpQ3ghPiB2Hp6/giphy.gif",  # Soft animated
     }
     
     properties = {
