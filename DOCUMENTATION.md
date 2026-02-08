@@ -74,6 +74,7 @@ This bot removes all friction: just dump your thoughts via Telegram, and AI hand
 | `/stats` | View your XP, level, and daily streak |
 | `/weekly` | Weekly progress review |
 | `/habits` | 🔁 View recurring habits and completion status |
+| `/dashboard` | 📊 Open visual widget dashboard (Mini App) |
 | `/health` | 🏃 View Health category tasks |
 | `/study` | 📚 View Study category tasks |
 | `/work` | 💼 View Work category tasks |
