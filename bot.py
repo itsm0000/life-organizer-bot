@@ -1643,11 +1643,24 @@ def main():
                 level_progress = (xp - current_threshold) / max(next_threshold - current_threshold, 1)
                 
                 # Check for format=kwgt (Rich Text Output)
+                # Check for format=kwgt (Rich Text Output)
                 # Check both parsed param AND raw query string (aggressive check for pasted URLs)
                 output_format = request.query_params.get("format")
                 raw_query = request.url.query.decode() if isinstance(request.url.query, bytes) else str(request.url.query)
                 
-                if output_format == "kwgt" or "format=kwgt" in raw_query:
+                # Debug logging to see what KWGT is actually sending
+                logger.info(f"API Request: {request.url}")
+                logger.info(f"Raw Query: {raw_query}")
+                
+                # Check for encoded format or if format is embedded in key
+                is_kwgt = (
+                    output_format == "kwgt" 
+                    or "format=kwgt" in raw_query 
+                    or "format%3Dkwgt" in raw_query
+                    or "kwgt" in api_key  # Fallback: if key itself has "kwgt" inside
+                )
+                
+                if is_kwgt:
                     # Determine fire intensity
                     fire_icon = "🔥" if streak >= 7 else "🕯️"
                     fire_color = "#FF4500" if streak >= 30 else "#FFA500" if streak >= 7 else "#F5DEB3"
