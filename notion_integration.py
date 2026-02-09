@@ -293,6 +293,116 @@ def get_items_by_category(category: str):
         return []
 
 
+def get_upcoming_deadlines(limit=3):
+    """Get active items with upcoming deadlines, sorted by date"""
+    db_id = os.getenv("LIFE_AREAS_DB_ID")
+    
+    try:
+        # Fetch all active items first (client-side filtering is more reliable for variable date property names)
+        # We reuse the logic from get_active_items but only query specific properties to be lighter? 
+        # Actually easier to just get active items and filter/sort in python
+        items = get_active_items()
+        
+        deadlines = []
+        for item in items:
+            props = item.get("properties", {})
+            
+            # Look for date property (Date, Deadline, Due Date)
+            date_prop = None
+            if "Date" in props: date_prop = props["Date"]
+            elif "Due Date" in props: date_prop = props["Due Date"]
+            elif "Deadline" in props: date_prop = props["Deadline"]
+            
+            if not date_prop or not date_prop.get("date"):
+                continue
+                
+            date_str = date_prop["date"]["start"]
+            # Parse date (ISO format)
+            try:
+                # Handle YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS...
+                if "T" in date_str:
+                    target_date = datetime.fromisoformat(date_str).replace(tzinfo=None)
+                else:
+                    target_date = datetime.strptime(date_str, "%Y-%m-%d")
+                
+                # Calculate days left
+                now = datetime.now()
+                # For day-only dates, compare with today's date
+                if "T" not in date_str:
+                    days_left = (target_date.date() - now.date()).days
+                else:
+                    days_left = (target_date - now).days
+                
+                # Only include future or today's deadlines (or slightly past due)
+                # Let's show everything from "yesterday" onwards
+                if days_left >= -1:
+                    title = props.get("Name", {}).get("title", [{}])[0].get("text", {}).get("content", "Untitled")
+                    deadlines.append({
+                        "id": item["id"],
+                        "title": title,
+                        "date": date_str,
+                        "days_left": days_left
+                    })
+            except Exception as e:
+                logger.error(f"Error parsing date for item {item['id']}: {e}")
+                continue
+        
+        # Sort by days remaining
+        deadlines.sort(key=lambda x: x["days_left"])
+        
+        return deadlines[:limit]
+        
+    except Exception as e:
+        logger.error(f"Error getting deadlines: {e}")
+        return []
+
+
+def get_completed_today():
+    """Get items completed today"""
+    db_id = os.getenv("LIFE_AREAS_DB_ID")
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    
+    try:
+        # We need to query for Done items specifically as get_active_items filters them out
+        # AND check if they were updated today (approximation) or have a specific "Completed At" date
+        # Since we don't track "Completed At" explicitly in a property usually, we rely on "Last Edited Time" 
+        # provided by Notion meta-properties
+        
+        response = notion.request(
+            path=f"databases/{db_id}/query",
+            method="POST",
+            body={
+                "filter": {
+                     "or": [
+                        {"property": "Status", "select": {"equals": "Done"}},
+                        {"property": "Status", "select": {"equals": "Completed"}}
+                     ]
+                }
+            }
+        )
+        
+        items = response.get("results", [])
+        completed_today = []
+        
+        for item in items:
+            # Check last edited time
+            last_edited = item.get("last_edited_time", "")
+            if last_edited.startswith(today_str):
+                title = item["properties"].get("Name", {}).get("title", [{}])[0].get("text", {}).get("content", "Untitled")
+                category = item["properties"].get("Category", {}).get("select", {}).get("name", "General")
+                completed_today.append({
+                    "id": item["id"],
+                    "title": title,
+                    "category": category
+                })
+        
+        return completed_today
+        
+    except Exception as e:
+        logger.error(f"Error getting completed items: {e}")
+        return []
+
+
 def update_item(page_id: str, updates: dict):
     """
     Update an item's properties

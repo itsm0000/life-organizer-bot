@@ -26,7 +26,8 @@ import asyncio
 from ai_categorizer import categorize_message, analyze_image, parse_management_intent, ai_match_task, parse_habit_intent
 from notion_integration import (
     add_to_life_areas, add_to_brain_dump, log_progress, get_active_items,
-    search_items, update_item, delete_item, get_items_by_category, format_item_for_display
+    search_items, update_item, delete_item, get_items_by_category, format_item_for_display,
+    get_upcoming_deadlines, get_completed_today
 )
 from habits import (
     get_habits, create_habit, complete_habit, get_habit_by_name,
@@ -1661,26 +1662,83 @@ def main():
                 )
                 
                 if is_kwgt:
-                    # Determine fire intensity
-                    # Logic: Candle (0-6), Flame (7-29), Blaze (30+)
-                    if streak >= 30:
-                        fire_icon = "🔥"
-                        fire_color = "#FF4500" # Red-Orange (Inferno)
-                    elif streak >= 7:
-                        fire_icon = "🔥" 
-                        fire_color = "#FFA500" # Orange (Blazing)
-                    else:
-                        fire_icon = "🕯️" 
-                        fire_color = "#E0E0E0" # White/Gray (Candle)
+                    # Determine which widget to show
+                    widget_type = request.query_params.get("widget", "streak")
                     
-                    # Build Kustom Rich Text
-                    # Reduced sizes to fit standard widget bounds
-                    rich_text = (
-                        f"[c={fire_color}][s=100]{fire_icon}[/s][/c]\n"
-                        f"[s=60][b]{streak}[/b][/s]\n"
-                        f"[c=#AAAAAA][s=20]Daily Streak[/s][/c]"
-                    )
-                    return Response(rich_text, media_type="text/plain", headers=headers)
+                    if widget_type == "deadline":
+                        # Deadline Widget
+                        deadlines = get_upcoming_deadlines(1)
+                        if deadlines:
+                            d = deadlines[0]
+                            days = d['days_left']
+                            
+                            # Color logic
+                            if days < 1: color = "#FF4500" # Red
+                            elif days < 3: color = "#FFA500" # Orange
+                            else: color = "#10B981" # Green
+                            
+                            time_text = "DUE TODAY" if days <= 0 else f"{days} DAYS LEFT"
+                            if days < 0: time_text = f"OVERDUE ({abs(days)}d)"
+                            
+                            rich_text = (
+                                f"[c={color}][s=40][b]{time_text}[/b][/s][/c]\n"
+                                f"[s=30]{d['title']}[/s]\n"
+                                f"[c=#AAAAAA][s=20]{d['date'][:10]}[/s][/c]"
+                            )
+                        else:
+                            rich_text = (
+                                "[c=#10B981][s=40][b]NO DEADLINES[/b][/s][/c]\n"
+                                "[s=30]You're all caught up![/s]\n"
+                                "[c=#AAAAAA][s=20]Relax ☕[/s][/c]"
+                            )
+                        return Response(rich_text, media_type="text/plain", headers=headers)
+                        
+                    elif widget_type == "summary":
+                        # Daily Summary Widget
+                        completed = get_completed_today()
+                        active_items = get_active_items() or []
+                        total = len(active_items) + len(completed) # Rough estimate of total today + pending
+                        # Actually tasksToday in JSON was just active count. Let's fix this logic to be consistent.
+                        # For KWGT, let's just show Done / Pending
+                        
+                        done_count = len(completed)
+                        pending_count = len(active_items)
+                        
+                        # List top 3 completed
+                        list_text = ""
+                        for task in completed[:3]:
+                            list_text += f"✓ {task['title']}\n"
+                        if len(completed) > 3:
+                            list_text += f"+ {len(completed)-3} more..."
+                        
+                        rich_text = (
+                            f"[s=40][b]TODAY'S SUMMARY[/b][/s]\n"
+                            f"[c=#10B981][s=30]{done_count} Done[/s][/c]  |  [c=#FFA500][s=30]{pending_count} Pending[/s][/c]\n\n"
+                            f"[s=25]{list_text}[/s]"
+                        )
+                        return Response(rich_text, media_type="text/plain", headers=headers)
+                    
+                    else:
+                        # Default: Streak Flame
+                        # Logic: Candle (0-6), Flame (7-29), Blaze (30+)
+                        if streak >= 30:
+                            fire_icon = "🔥"
+                            fire_color = "#FF4500" # Red-Orange (Inferno)
+                        elif streak >= 7:
+                            fire_icon = "🔥" 
+                            fire_color = "#FFA500" # Orange (Blazing)
+                        else:
+                            fire_icon = "🕯️" 
+                            fire_color = "#E0E0E0" # White/Gray (Candle)
+                        
+                        # Build Kustom Rich Text
+                        # Reduced sizes to fit standard widget bounds
+                        rich_text = (
+                            f"[c={fire_color}][s=100]{fire_icon}[/s][/c]\n"
+                            f"[s=60][b]{streak}[/b][/s]\n"
+                            f"[c=#AAAAAA][s=20]Daily Streak[/s][/c]"
+                        )
+                        return Response(rich_text, media_type="text/plain", headers=headers)
 
                 # Get active tasks count
                 active_items = get_active_items() or []
@@ -1696,7 +1754,9 @@ def main():
                     "levelProgress": min(level_progress, 1.0),
                     "streak": streak,
                     "tasksToday": tasks_total,
-                    "tasksCompleted": tasks_done
+                    "tasksCompleted": tasks_done,
+                    "deadlines": get_upcoming_deadlines(3),
+                    "completed_today": get_completed_today()
                 }
                 
                 return JSONResponse(response_data, headers=headers)
