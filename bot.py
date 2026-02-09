@@ -1599,6 +1599,12 @@ def main():
                 # 1. Try API Key (for external widgets like KWGT)
                 api_key = request.query_params.get("key")
                 if api_key:
+                    # Sanitize: User might have pasted full URL "https://...key=UUID"
+                    if "key=" in api_key:
+                        api_key = api_key.split("key=")[-1]
+                    # Sanitize: Remove any trailing URL junk if they pasted weirdly
+                    api_key = api_key.split("&")[0] 
+                    
                     # Scan users for matching key (simple linear search)
                     for uid, data in user_data_source.items():
                         if data.get("api_key") == api_key:
