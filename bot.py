@@ -1893,14 +1893,18 @@ def build_app():
         return application
 
 
+# Expose app for Uvicorn
+starlette_app = build_app()
+
 if __name__ == "__main__":
-    app = build_app()
     if os.getenv("RAILWAY_PUBLIC_DOMAIN"):
         import uvicorn
         port = int(os.getenv("PORT", 8443))
-        uvicorn.run(app, host="0.0.0.0", port=port)
+        uvicorn.run(starlette_app, host="0.0.0.0", port=port)
     else:
-        app.run_polling(allowed_updates=Update.ALL_TYPES)
+        # Local polling
+        app = build_app()
+        app.run_polling()
 
 # Expose for Uvicorn worker (ASGI)
 if os.getenv("RAILWAY_PUBLIC_DOMAIN"):
