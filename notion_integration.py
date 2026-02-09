@@ -12,7 +12,7 @@ load_dotenv()
 notion = Client(auth=os.getenv("NOTION_TOKEN"))
 
 
-def add_to_life_areas(category, title, item_type, priority, notes="", image_url=None):
+def add_to_life_areas(category, title, item_type, priority, notes="", image_url=None, due_date=None):
     """Add an item to the Life Areas database with visual styling"""
     db_id = os.getenv("LIFE_AREAS_DB_ID")
     
@@ -52,6 +52,9 @@ def add_to_life_areas(category, title, item_type, priority, notes="", image_url=
         "Priority": {"select": {"name": priority}},
         "Date Added": {"date": {"start": datetime.now().isoformat()}},
     }
+    
+    if due_date:
+        properties["Date"] = {"date": {"start": due_date}}
     
     if notes:
         properties["Notes"] = {"rich_text": [{"text": {"content": notes}}]}
@@ -439,6 +442,50 @@ def delete_item(page_id: str):
     except Exception as e:
         print(f"Error deleting item: {e}")
         return False
+
+
+def get_high_priority_tasks(limit=3):
+    """Get active High Priority items"""
+    db_id = os.getenv("LIFE_AREAS_DB_ID")
+    
+    try:
+        # WORKAROUND: databases.query() is missing, using raw request
+        response = notion.request(
+            path=f"databases/{db_id}/query",
+            method="POST",
+            body={
+                "filter": {
+                    "and": [
+                        {"property": "Priority", "select": {"equals": "High"}},
+                        {"property": "Status", "select": {"equals": "Active"}}
+                    ]
+                },
+                # Sort by Date Added descending (newest first) or maybe deadline?
+                # Let's simple sort by Name for stability or Date Added
+                "sorts": [{"property": "Date Added", "direction": "descending"}],
+                "page_size": limit
+            }
+        )
+        
+        items = response.get("results", [])
+        high_priority = []
+        
+        for item in items:
+            title = item["properties"].get("Name", {}).get("title", [{}])[0].get("text", {}).get("content", "Untitled")
+            category = item["properties"].get("Category", {}).get("select", {}).get("name", "General")
+            
+            high_priority.append({
+                "id": item["id"],
+                "title": title,
+                "category": category,
+                "priority": "High"
+            })
+            
+        return high_priority
+        
+    except Exception as e:
+        logger.error(f"Error getting high priority tasks: {e}")
+        return []
 
 
 def format_item_for_display(item: dict) -> str:

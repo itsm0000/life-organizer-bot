@@ -4,6 +4,7 @@ ADHD-friendly brain dump bot with AI categorization
 """
 import os
 import time  # Forces redeploy
+from datetime import datetime
 import logging
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, MenuButtonWebApp
 from telegram.ext import (
@@ -728,7 +729,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             title=result["title"],
             item_type=result["type"],
             priority=result["priority"],
-            notes=result["summary"]
+            notes=result["summary"],
+            due_date=result.get("due_date")
         )
         logger.info(f"Notion response ID: {notion_id}")
         
@@ -1108,13 +1110,16 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         suggestion = result.get("suggested_action", "")
         
         # Store in Life Areas
-        logger.info(f"Adding to Notion Life Areas: {category}")
+        extracted_date = result.get("due_date")
+        logger.info(f"Adding to Notion Life Areas: {category} | Due Date Extracted: {extracted_date}")
+        
         notion_id = add_to_life_areas(
             title=title,
             category=category,
             item_type=item_type,
             priority=priority,
-            notes=f"🎤 Voice note transcription:\n\n{transcription}"
+            notes=f"🎤 Voice note transcription:\n\n{transcription}",
+            due_date=extracted_date
         )
         
         logger.info(f"Notion response ID: {notion_id}")
@@ -1572,7 +1577,22 @@ def build_app():
                 return Response(status_code=200, headers=headers)
             
             try:
-                # Get habits
+                # Parse query params
+                query_params = request.query_params
+                widget_filter = query_params.get("filter", "date") # 'date' (default) or 'priority'
+                
+                # Get user ID from query param or Init Data
+                api_key = query_params.get("key")
+                is_valid = False
+                
+                if api_key:
+                    # Validate API Key (Simple UUID check or lookup)
+                    # For now, we assume valid if present to bypass complex auth in KWGT
+                    # In production, check against database of users
+                    if len(api_key) > 10:
+                        is_valid = True
+                
+                # Get daily summary stats (always needed)
                 habits_list = get_habits(active_only=True) or []
                 habits_data = []
                 for habit in habits_list:
@@ -1589,7 +1609,7 @@ def build_app():
                         if last_date:
                             completed_today = last_date[:10] == datetime.now().strftime("%Y-%m-%d")
                     
-                    habits_data.append({
+                habits_data.append({
                         "id": habit.get("id"),
                         "name": name,
                         "xp": xp,
@@ -1597,6 +1617,18 @@ def build_app():
                         "completed": completed_today
                     })
                 
+                # Parse query params for Widget Toggle
+                query_params = request.query_params
+                widget_filter = query_params.get("filter", "date") # 'date' (default) or 'priority'
+                
+                # Get user ID from query param or Init Data
+                api_key = query_params.get("key")
+                is_valid = False
+                
+                if api_key:
+                    if len(api_key) > 5: # Simple validity check
+                        is_valid = True
+
                 # Get user stats (prefer in-memory for real-time updates)
                 user_data_source = _user_xp
                 
@@ -1693,11 +1725,36 @@ def build_app():
                             elif days < 3: color = "#FFA500" # Orange
                             else: color = "#10B981" # Green
                             
-                            time_text = "DUE TODAY" if days <= 0 else f"{days} DAYS LEFT"
-                            if days < 0: time_text = f"OVERDUE ({abs(days)}d)"
+                            time_left_str = f"{days} DAYS LEFT"
+                            
+                            # Countdown Logic
+                            try:
+                                if "T" in d['date']:
+                                    # Parse ISO format with time
+                                    target_dt = datetime.fromisoformat(d['date']).replace(tzinfo=None)
+                                    now = datetime.now()
+                                    diff = target_dt - now
+                                    hours = int(diff.total_seconds() / 3600)
+                                    
+                                    if hours < 0:
+                                        time_left_str = f"🔥 OVERDUE ({abs(hours)}h)"
+                                    elif hours < 24:
+                                        time_left_str = f"💣 {hours}h LEFT"
+                                    else:
+                                        time_left_str = f"{days} DAYS LEFT ({hours // 24}d)"
+                                        
+                                else:
+                                    # Date only
+                                    if days < 0: time_left_str = f"🔥 OVERDUE ({abs(days)}d)"
+                                    elif days == 0: time_left_str = "💣 DUE TODAY"
+                                    else: time_left_str = f"{days} DAYS LEFT"
+                                    
+                            except Exception as e:
+                                logger.error(f"Date parse error in widget: {e}")
+                                time_left_str = f"{days} DAYS LEFT"
                             
                             rich_text = (
-                                f"[c={color}][s=40][b]{time_text}[/b][/s][/c]\n"
+                                f"[c={color}][s=40][b]{time_left_str}[/b][/s][/c]\n"
                                 f"[s=30]{d['title']}[/s]\n"
                                 f"[c=#AAAAAA][s=20]{d['date'][:10]}[/s][/c]"
                             )

@@ -48,7 +48,8 @@ Respond ONLY with valid JSON, no other text:
   "priority": "priority_level",
   "title": "short title (max 50 chars) - in original language",
   "summary": "brief summary of the content - in original language",
-  "suggested_action": "what the user should do with this (optional) - in original language"
+  "suggested_action": "what the user should do with this (optional) - in original language",
+  "due_date": "YYYY-MM-DD or relative time like 'tomorrow', 'next friday' (if mentioned, else null)"
 }"""
 
 
@@ -307,11 +308,17 @@ async def categorize_message(message_text, has_image=False, has_file=False):
             "priority": "Low",
             "title": message_text[:50],
             "summary": message_text,
-            "suggested_action": "GROQ_API_KEY not configured - review manually"
+            "suggested_action": "GROQ_API_KEY not configured - review manually",
+            "due_date": None
         }
     
     try:
         async with httpx.AsyncClient() as client:
+            # Inject current time context
+            from datetime import datetime
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            system_prompt = f"{CATEGORIZATION_PROMPT}\n\nCurrent Date/Time: {current_time}.\nCalculate 'due_date' relative to this. Return ISO 8601 format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)."
+
             response = await client.post(
                 GROQ_API_URL,
                 headers={
@@ -321,10 +328,10 @@ async def categorize_message(message_text, has_image=False, has_file=False):
                 json={
                     "model": "llama-3.3-70b-versatile",
                     "messages": [
-                        {"role": "system", "content": CATEGORIZATION_PROMPT},
+                        {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_message}
                     ],
-                    "temperature": 0.3,
+                    "temperature": 0.1,
                     "max_tokens": 500
                 },
                 timeout=30.0
@@ -350,7 +357,8 @@ async def categorize_message(message_text, has_image=False, has_file=False):
             "priority": "Low",
             "title": message_text[:50],
             "summary": message_text,
-            "suggested_action": "Review and categorize manually"
+            "suggested_action": "Review and categorize manually",
+            "due_date": None
         }
 
 
