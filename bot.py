@@ -1636,6 +1636,22 @@ def main():
                 next_threshold = level_thresholds[min(level, len(level_thresholds) - 1)]
                 level_progress = (xp - current_threshold) / max(next_threshold - current_threshold, 1)
                 
+                # Check for format=kwgt (Rich Text Output)
+                output_format = request.query_params.get("format")
+                if output_format == "kwgt":
+                    # Determine fire intensity
+                    fire_icon = "🔥" if streak >= 7 else "🕯️"
+                    fire_color = "#FF4500" if streak >= 30 else "#FFA500" if streak >= 7 else "#F5DEB3"
+                    
+                    # Build Kustom Rich Text
+                    # [c=color][s=size]Text[/s][/c]
+                    rich_text = (
+                        f"[c={fire_color}][s=200]{fire_icon}[/s][/c]\n"
+                        f"[s=120][b]{streak}[/b][/s]\n"
+                        f"[c=#AAAAAA][s=40]Daily Streak[/s][/c]"
+                    )
+                    return Response(rich_text, media_type="text/plain", headers=headers)
+
                 # Get active tasks count
                 active_items = get_active_items() or []
                 tasks_total = len(active_items)
