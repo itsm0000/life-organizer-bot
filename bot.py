@@ -3,6 +3,7 @@ Life Organizer Telegram Bot
 ADHD-friendly brain dump bot with AI categorization
 """
 import os
+import time  # Forces redeploy
 import logging
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, MenuButtonWebApp
 from telegram.ext import (
