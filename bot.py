@@ -267,6 +267,29 @@ async def debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Error: {e}")
 
 @secure
+async def apikey_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Generate API Key for external widgets"""
+    import uuid
+    user_id = update.effective_user.id
+    
+    # Generate if missing
+    if "api_key" not in _user_xp[user_id]:
+        _user_xp[user_id]["api_key"] = str(uuid.uuid4())
+        # Trigger save
+        add_xp(user_id, 0) 
+    
+    api_key = _user_xp[user_id]["api_key"]
+    dashboard_url = os.getenv("RAILWAY_PUBLIC_DOMAIN", "YOUR_APP_URL")
+    
+    await update.message.reply_text(
+        f"🔑 **Your Widget API Key**\n\n"
+        f"`{api_key}`\n\n"
+        f"**API URL for KWGT/Scriptable:**\n"
+        f"`https://{dashboard_url}/api/dashboard?key={api_key}`\n\n"
+        f"⚠️ Keep this key secret!"
+    )
+
+@secure
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send a message when the command /help is issued."""
     await update.message.reply_text(
@@ -1468,6 +1491,7 @@ def main():
     # Visual Dashboard (Mini App)
     application.add_handler(CommandHandler("dashboard", dashboard_command))
     application.add_handler(CommandHandler("debug", debug_command))
+    application.add_handler(CommandHandler("apikey", apikey_command))
     
     # Focus Mode (must be before generic text handler)
     application.add_handler(focus_handler)
@@ -1569,19 +1593,31 @@ def main():
                 # Get user stats (prefer in-memory for real-time updates)
                 user_data_source = _user_xp
                 
-                # Identify user from Telegram Init Data
+                # Identify user from Telegram Init Data OR API Key
                 user_id = 0
-                init_data = request.headers.get("X-Telegram-Init-Data", "")
-                if init_data:
-                    try:
-                        from urllib.parse import parse_qs
-                        import json
-                        parsed = parse_qs(init_data)
-                        user_json_str = parsed.get("user", ["{}"])[0]
-                        user_obj = json.loads(user_json_str)
-                        user_id = int(user_obj.get("id", 0))
-                    except Exception as e:
-                        logger.error(f"Auth parsing error: {e}")
+                
+                # 1. Try API Key (for external widgets like KWGT)
+                api_key = request.query_params.get("key")
+                if api_key:
+                    # Scan users for matching key (simple linear search)
+                    for uid, data in user_data_source.items():
+                        if data.get("api_key") == api_key:
+                            user_id = uid
+                            break
+                
+                # 2. Try Telegram Init Data (if no API key found)
+                if user_id == 0:
+                    init_data = request.headers.get("X-Telegram-Init-Data", "")
+                    if init_data:
+                        try:
+                            from urllib.parse import parse_qs
+                            import json
+                            parsed = parse_qs(init_data)
+                            user_json_str = parsed.get("user", ["{}"])[0]
+                            user_obj = json.loads(user_json_str)
+                            user_id = int(user_obj.get("id", 0))
+                        except Exception as e:
+                            logger.error(f"Auth parsing error: {e}")
                 
                 # Fallback: only if we couldn't identify user, pick first one (dev mode)
                 if user_id == 0 and user_data_source:
