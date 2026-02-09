@@ -1906,6 +1906,4 @@ if __name__ == "__main__":
         app = build_app()
         app.run_polling()
 
-# Expose for Uvicorn worker (ASGI)
-if os.getenv("RAILWAY_PUBLIC_DOMAIN"):
-    starlette_app = build_app()
+
