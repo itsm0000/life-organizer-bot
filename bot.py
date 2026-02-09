@@ -1471,7 +1471,8 @@ def main():
     load_xp_data()
 
     # Create the Application
-    application = Application.builder().token(os.getenv("TELEGRAM_BOT_TOKEN")).build()
+    # updater=None prevents PTB from registering signal handlers or trying to manage the loop
+    application = Application.builder().token(os.getenv("TELEGRAM_BOT_TOKEN")).updater(None).build()
     
     # Add handlers
     application.add_handler(CommandHandler("start", start))
