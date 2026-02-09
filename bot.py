@@ -1643,8 +1643,11 @@ def main():
                 level_progress = (xp - current_threshold) / max(next_threshold - current_threshold, 1)
                 
                 # Check for format=kwgt (Rich Text Output)
+                # Check both parsed param AND raw query string (aggressive check for pasted URLs)
                 output_format = request.query_params.get("format")
-                if output_format == "kwgt":
+                raw_query = request.url.query.decode() if isinstance(request.url.query, bytes) else str(request.url.query)
+                
+                if output_format == "kwgt" or "format=kwgt" in raw_query:
                     # Determine fire intensity
                     fire_icon = "🔥" if streak >= 7 else "🕯️"
                     fire_color = "#FF4500" if streak >= 30 else "#FFA500" if streak >= 7 else "#F5DEB3"
