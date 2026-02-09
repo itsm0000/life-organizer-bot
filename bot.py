@@ -1804,28 +1804,31 @@ def main():
         
         starlette_app = Starlette(routes=routes)
         
-        # Run using uvicorn directly
         import uvicorn
         
-        # We need to initialize the application first
-        async def run_server():
+        # Define lifecycle for Starlette to manage PTB
+        async def startup_ptb():
+            logger.info("Starting PTB Application...")
             await application.initialize()
             await application.start()
             await application.bot.set_webhook(url=webhook_url)
-            
-            config = uvicorn.Config(
-                app=starlette_app,
-                port=port,
-                host="0.0.0.0"
-            )
-            server = uvicorn.Server(config)
-            await server.serve()
-            
+            logger.info(f"Webhook set to {webhook_url}")
+
+        async def shutdown_ptb():
+            logger.info("Stopping PTB Application...")
             await application.stop()
             await application.shutdown()
+        
+        # Add lifecycle hooks to Starlette
+        starlette_app.add_event_handler("startup", startup_ptb)
+        starlette_app.add_event_handler("shutdown", shutdown_ptb)
 
-        # Run the async server
-        asyncio.run(run_server())
+        # Run Uvicorn specifically on the port
+        uvicorn.run(
+            starlette_app,
+            host="0.0.0.0",
+            port=port
+        )
     else:
         # Local development: Use polling mode
         logger.info("Running in POLLING mode (local development)")
