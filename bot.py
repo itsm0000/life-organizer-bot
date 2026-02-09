@@ -1662,14 +1662,16 @@ def main():
                 
                 if is_kwgt:
                     # Determine fire intensity
-                    # Always use Flame, just change color/intensity
-                    fire_icon = "🔥" 
+                    # Logic: Candle (0-6), Flame (7-29), Blaze (30+)
                     if streak >= 30:
+                        fire_icon = "🔥"
                         fire_color = "#FF4500" # Red-Orange (Inferno)
                     elif streak >= 7:
+                        fire_icon = "🔥" 
                         fire_color = "#FFA500" # Orange (Blazing)
                     else:
-                        fire_color = "#808080" # Gray/Dim (Spark)
+                        fire_icon = "🕯️" 
+                        fire_color = "#E0E0E0" # White/Gray (Candle)
                     
                     # Build Kustom Rich Text
                     # Reduced sizes to fit standard widget bounds
