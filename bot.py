@@ -1665,6 +1665,15 @@ def main():
                     # Determine which widget to show
                     widget_type = request.query_params.get("widget", "streak")
                     
+                    # Fallback: Check raw query manually if standard parsing failed
+                    # This helps if the URL format is messed up by the client or pasting
+                    if "widget=deadline" in raw_query or "widget%3Ddeadline" in raw_query:
+                        widget_type = "deadline"
+                    elif "widget=summary" in raw_query or "widget%3Dsummary" in raw_query:
+                        widget_type = "summary"
+                        
+                    logger.info(f"KWGT Request - Widget Type: {widget_type}")
+                    
                     if widget_type == "deadline":
                         # Deadline Widget
                         deadlines = get_upcoming_deadlines(1)
