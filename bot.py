@@ -1465,8 +1465,12 @@ async def evening_habits_callback(context):
             logger.error(f"Failed to send evening habits to {user_id}: {e}")
 
 
-def main():
-    """Start the bot"""
+
+# Global app instance for ASGI
+starlette_app = None
+
+def build_app():
+    """Build and configure the bot application"""
     # Load XP data
     load_xp_data()
 
@@ -1824,17 +1828,22 @@ def main():
         starlette_app.add_event_handler("startup", startup_ptb)
         starlette_app.add_event_handler("shutdown", shutdown_ptb)
 
-        # Run Uvicorn specifically on the port
-        uvicorn.run(
-            starlette_app,
-            host="0.0.0.0",
-            port=port
-        )
+        return starlette_app
     else:
-        # Local development: Use polling mode
+        # Local development: Return PTB application
         logger.info("Running in POLLING mode (local development)")
-        application.run_polling(allowed_updates=Update.ALL_TYPES)
+        return application
 
 
 if __name__ == "__main__":
-    main()
+    app = build_app()
+    if os.getenv("RAILWAY_PUBLIC_DOMAIN"):
+        import uvicorn
+        port = int(os.getenv("PORT", 8443))
+        uvicorn.run(app, host="0.0.0.0", port=port)
+    else:
+        app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+# Expose for Uvicorn worker (ASGI)
+if os.getenv("RAILWAY_PUBLIC_DOMAIN"):
+    starlette_app = build_app()
