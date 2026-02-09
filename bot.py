@@ -1667,12 +1667,13 @@ def main():
                     
                     # Fallback: Check raw query manually if standard parsing failed
                     # This helps if the URL format is messed up by the client or pasting
+                    # FORCE DEPLOYMENT CHECK 2026-02-09
                     if "widget=deadline" in raw_query or "widget%3Ddeadline" in raw_query:
                         widget_type = "deadline"
                     elif "widget=summary" in raw_query or "widget%3Dsummary" in raw_query:
                         widget_type = "summary"
                         
-                    logger.info(f"KWGT Request - Widget Type: {widget_type}")
+                    logger.info(f"***** KWGT RESOLVED WIDGET TYPE to: {widget_type} *****")
                     
                     if widget_type == "deadline":
                         # Deadline Widget
