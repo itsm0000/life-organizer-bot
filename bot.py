@@ -1792,9 +1792,13 @@ def main():
                 return Response(status_code=500)
 
         # Create custom starlette routes
+        async def api_version(request):
+            return Response("v3.1 KWGT FIXED", media_type="text/plain")
+
         routes = [
             Route("/", telegram_webhook, methods=["POST"]),
             Route("/api/dashboard", api_dashboard, methods=["GET", "OPTIONS"]),
+            Route("/api/version", api_version, methods=["GET"]), # Version check
             Route("/health", health_check, methods=["GET"]),
         ]
         
