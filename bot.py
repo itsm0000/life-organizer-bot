@@ -1489,6 +1489,7 @@ def build_app():
     application.add_handler(CommandHandler("active", active_command))
     application.add_handler(CommandHandler("stats", stats_command))
     application.add_handler(CommandHandler("weekly", weekly_command))
+    application.add_handler(CommandHandler("version", version_command)) # Added /version command
     
     # Category quick commands
     application.add_handler(CommandHandler("health", health_command))
