@@ -1662,15 +1662,21 @@ def main():
                 
                 if is_kwgt:
                     # Determine fire intensity
-                    fire_icon = "🔥" if streak >= 7 else "🕯️"
-                    fire_color = "#FF4500" if streak >= 30 else "#FFA500" if streak >= 7 else "#F5DEB3"
+                    # Always use Flame, just change color/intensity
+                    fire_icon = "🔥" 
+                    if streak >= 30:
+                        fire_color = "#FF4500" # Red-Orange (Inferno)
+                    elif streak >= 7:
+                        fire_color = "#FFA500" # Orange (Blazing)
+                    else:
+                        fire_color = "#808080" # Gray/Dim (Spark)
                     
                     # Build Kustom Rich Text
-                    # [c=color][s=size]Text[/s][/c]
+                    # Reduced sizes to fit standard widget bounds
                     rich_text = (
-                        f"[c={fire_color}][s=200]{fire_icon}[/s][/c]\n"
-                        f"[s=120][b]{streak}[/b][/s]\n"
-                        f"[c=#AAAAAA][s=40]Daily Streak[/s][/c]"
+                        f"[c={fire_color}][s=100]{fire_icon}[/s][/c]\n"
+                        f"[s=60][b]{streak}[/b][/s]\n"
+                        f"[c=#AAAAAA][s=20]Daily Streak[/s][/c]"
                     )
                     return Response(rich_text, media_type="text/plain", headers=headers)
 
