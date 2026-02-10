@@ -1474,6 +1474,11 @@ async def evening_habits_callback(context):
 # Global app instance for ASGI
 starlette_app = None
 
+
+async def version_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Debug command to check running version"""
+    await update.message.reply_text("🤖 Bot Version: v2.2 (FIXED CRASH)\n📅 Updated: 2026-02-09\n✅ Countdown Bomb Active")
+
 def build_app():
     """Build and configure the bot application"""
     # Load XP data
