@@ -317,7 +317,7 @@ async def categorize_message(message_text, has_image=False, has_file=False):
             # Inject current time context
             from datetime import datetime
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            system_prompt = f"{CATEGORIZATION_PROMPT}\n\nCurrent Date/Time: {current_time}.\nCalculate 'due_date' relative to this. Return ISO 8601 format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS).\nIMPORTANT: If the deadline crosses midnight, advance the date (e.g. 23:00 + 2h = Next Day 01:00)."
+            system_prompt = f"{CATEGORIZATION_PROMPT}\n\nCurrent Date/Time: {current_time}.\n\nINSTRUCTIONS FOR DUE DATE:\n1. If a specific time/date is mentioned (e.g. 'tonight', 'by Friday', 'in 2 hours'), calculate the ISO 8601 date relative to Current Date/Time.\n2. If NO time/date is mentioned, YOU MUST SET 'due_date': null. DO NOT default to the current time.\n3. If the deadline crosses midnight, advance the date accordingly."
 
             response = await client.post(
                 GROQ_API_URL,
