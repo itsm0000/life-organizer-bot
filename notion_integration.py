@@ -338,13 +338,33 @@ def get_upcoming_deadlines(limit=3):
                 
                 # Only include future or today's deadlines (or slightly past due)
                 # Let's show everything from "yesterday" onwards
+                
+                # Format Countdown String efficiently here so it's available in JSON
+                if "T" in date_str:
+                    # ISO format with time
+                    diff_seconds = (target_date - now).total_seconds()
+                    hours = int(diff_seconds / 3600)
+                    
+                    if diff_seconds < 0:
+                        formatted_time = f"🔥 OVERDUE ({abs(hours)}h)"
+                    elif hours < 24:
+                        formatted_time = f"💣 {hours}h LEFT"
+                    else:
+                        formatted_time = f"{days_left} DAYS LEFT"
+                else:
+                    # Date only
+                    if days_left < 0: formatted_time = f"🔥 OVERDUE ({abs(days_left)}d)"
+                    elif days_left == 0: formatted_time = "💣 DUE TODAY"
+                    else: formatted_time = f"{days_left} DAYS LEFT"
+
                 if days_left >= -1:
                     title = props.get("Name", {}).get("title", [{}])[0].get("text", {}).get("content", "Untitled")
                     deadlines.append({
                         "id": item["id"],
                         "title": title,
                         "date": date_str,
-                        "days_left": days_left
+                        "days_left": days_left,
+                        "formatted_time": formatted_time
                     })
             except Exception as e:
                 logger.error(f"Error parsing date for item {item['id']}: {e}")
