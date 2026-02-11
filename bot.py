@@ -1573,10 +1573,14 @@ def build_app():
         async def api_dashboard(request):
             """API endpoint for dashboard data"""
             # CORS headers
+            # CORS and Cache Control headers
             headers = {
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Headers": "Content-Type, X-Telegram-Init-Data",
-                "Access-Control-Allow-Methods": "GET, OPTIONS"
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
             }
             
             if request.method == "OPTIONS":

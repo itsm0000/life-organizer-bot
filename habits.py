@@ -123,17 +123,33 @@ def complete_habit(habit_id):
 
 
 def get_habit_by_name(name_query):
-    """Find a habit by partial name match"""
+    """Find a habit by partial name match with normalization"""
     habits = get_habits(active_only=True)
     
-    name_lower = name_query.lower()
+    # Normalize query (remove spaces, lowercase)
+    query_norm = name_query.lower().replace(" ", "").replace("-", "")
+    best_match = None
+    
     for habit in habits:
         habit_name = habit.get("properties", {}).get("Name", {}).get("title", [{}])
         if habit_name:
-            title = habit_name[0].get("text", {}).get("content", "").lower()
-            if name_lower in title or title in name_lower:
+            title = habit_name[0].get("text", {}).get("content", "")
+            title_norm = title.lower().replace(" ", "").replace("-", "")
+            
+            # 1. Exact match (normalized) "skincare" == "skincare"
+            if query_norm == title_norm:
                 return habit
-    return None
+            
+            # 2. Substring match (normalized) "skin" in "skincare"
+            if query_norm in title_norm:
+                best_match = habit
+                # Continue searching for exact match, but keep this as backup
+            
+            # 3. Original substring match (fallback)
+            if name_query.lower() in title.lower():
+                 best_match = habit
+
+    return best_match
 
 
 def format_habit_for_display(habit) -> str:
