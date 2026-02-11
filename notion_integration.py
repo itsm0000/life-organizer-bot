@@ -324,27 +324,20 @@ def get_upcoming_deadlines(limit=3):
             try:
                 # Handle YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS...
                 if "T" in date_str:
-                    target_date = datetime.fromisoformat(date_str).replace(tzinfo=None)
-                else:
-                    target_date = datetime.strptime(date_str, "%Y-%m-%d")
-                
-                # Calculate days left
-                now = datetime.now()
-                # For day-only dates, compare with today's date
-                if "T" not in date_str:
-                    days_left = (target_date.date() - now.date()).days
-                else:
-                    days_left = (target_date - now).days
-                
-                # Only include future or today's deadlines (or slightly past due)
-                # Let's show everything from "yesterday" onwards
-                
-                # Format Countdown String efficiently here so it's available in JSON
-                if "T" in date_str:
-                    # ISO format with time
+                    # Handle ISO format with time (e.g. 2023-10-27T10:00:00.000+00:00)
+                    # We keep timezone info if present
+                    target_date = datetime.fromisoformat(date_str)
+                    
+                    # Get current time (aware if target is aware, naive otherwise)
+                    if target_date.tzinfo is not None:
+                        now = datetime.now().astimezone() # Local aware
+                    else:
+                        now = datetime.now() # Naive
+                        
                     diff_seconds = (target_date - now).total_seconds()
                     hours = int(diff_seconds / 3600)
-                    
+                    days_left = (target_date.date() - now.date()).days
+
                     if diff_seconds < 0:
                         formatted_time = f"🔥 OVERDUE ({abs(hours)}h)"
                     elif hours < 24:
@@ -352,7 +345,11 @@ def get_upcoming_deadlines(limit=3):
                     else:
                         formatted_time = f"{days_left} DAYS LEFT"
                 else:
-                    # Date only
+                    # Date only (YYYY-MM-DD)
+                    target_date = datetime.strptime(date_str, "%Y-%m-%d")
+                    now = datetime.now()
+                    days_left = (target_date.date() - now.date()).days
+                    
                     if days_left < 0: formatted_time = f"🔥 OVERDUE ({abs(days_left)}d)"
                     elif days_left == 0: formatted_time = "💣 DUE TODAY"
                     else: formatted_time = f"{days_left} DAYS LEFT"

@@ -1619,7 +1619,7 @@ def build_app():
                         if last_date:
                             completed_today = last_date[:10] == datetime.now().strftime("%Y-%m-%d")
                     
-                habits_data.append({
+                    habits_data.append({
                         "id": habit.get("id"),
                         "name": name,
                         "xp": xp,
