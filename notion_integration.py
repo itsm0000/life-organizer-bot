@@ -183,6 +183,10 @@ def get_active_items():
             # Log every item seen
             logger.info(f"Item found: '{title}' | Status: '{status_name}' | Category: '{category_name}'")
             
+            # Check if archived (deleted) in Notion
+            if item.get("archived"):
+                continue
+
             # In-memory filter: Keep everything that isn't explicitly "Done" or "Archived"
             # This is safer than filtering for "Active" which might be case-sensitive or misspelled
             if status_name.lower() not in ["done", "completed", "archived"]:

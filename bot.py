@@ -1483,7 +1483,31 @@ starlette_app = None
 
 async def version_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Debug command to check running version"""
-    await update.message.reply_text("🤖 Bot Version: v2.2 (FIXED CRASH)\n📅 Updated: 2026-02-09\n✅ Countdown Bomb Active")
+    await update.message.reply_text("🤖 Bot Version: v2.3 (Ghost Data Fix + Persistence)\n📅 Updated: 2026-02-12\n✅ Streak Restore Active")
+
+
+@secure
+async def set_streak_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Manually set streak (Restoration Tool)"""
+    user_id = update.effective_user.id
+    
+    try:
+        if not context.args:
+            await update.message.reply_text("Usage: /setstreak <amount>")
+            return
+            
+        amount = int(context.args[0])
+        _user_xp[user_id]["streak"] = amount
+        save_xp_data() # Force save to Notion
+        
+        await update.message.reply_text(f"✅ Streak restored to {amount} days!\nGenerated data saved to Notion.")
+        
+    except ValueError:
+        await update.message.reply_text("❌ Please provide a valid number.")
+    except Exception as e:
+        logger.error(f"Error setting streak: {e}")
+        await update.message.reply_text("❌ Error saving data.")
+
 
 def build_app():
     """Build and configure the bot application"""
@@ -1516,6 +1540,7 @@ def build_app():
     application.add_handler(CommandHandler("dashboard", dashboard_command))
     application.add_handler(CommandHandler("debug", debug_command))
     application.add_handler(CommandHandler("apikey", apikey_command))
+    application.add_handler(CommandHandler("setstreak", set_streak_command)) # Added /setstreak
     
     # Focus Mode (must be before generic text handler)
     application.add_handler(focus_handler)
