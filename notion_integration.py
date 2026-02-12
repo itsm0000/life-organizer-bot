@@ -523,3 +523,120 @@ def format_item_for_display(item: dict) -> str:
     
     return f"{priority_emoji} {title} ({category})"
 
+# ... (existing imports)
+import json
+
+# ... (existing functions)
+
+def get_or_create_system_page():
+    """
+    Get (or create) a special 'System_Data' page in the Habits DB.
+    We use this to store User XP and Streak data in a Code Block.
+    """
+    db_id = os.getenv("HABITS_DB_ID")
+    if not db_id: return None
+    
+    # 1. Search for existing page
+    try:
+        response = notion.databases.query(
+            database_id=db_id,
+            filter={
+                "property": "Name",
+                "title": {
+                    "equals": "System_Data_Do_Not_Delete"
+                }
+            }
+        )
+        results = response.get("results", [])
+        if results:
+            return results[0]["id"]
+            
+        # 2. Create if missing
+        print("Creating new System_Data page...")
+        new_page = notion.pages.create(
+            parent={"database_id": db_id},
+            properties={
+                "Name": {"title": [{"text": {"content": "System_Data_Do_Not_Delete"}}]},
+                "Active": {"checkbox": False}, # Hidden from normal queries
+                "Frequency": {"select": {"name": "Daily"}}, # Required fields
+                "Category": {"select": {"name": "Personal"}}
+            },
+            icon={"type": "emoji", "emoji": "💾"}
+        )
+        
+        # Initialize with empty JSON code block
+        notion.blocks.children.append(
+            block_id=new_page["id"],
+            children=[{
+                "object": "block",
+                "type": "code",
+                "code": {
+                    "rich_text": [{"type": "text", "text": {"content": "{}"}}],
+                    "language": "json"
+                }
+            }]
+        )
+        return new_page["id"]
+        
+    except Exception as e:
+        print(f"Error getting system page: {e}")
+        return None
+
+def save_user_data_to_notion(data_dict):
+    """Save user data (XP, Streak) to the System Page code block"""
+    page_id = get_or_create_system_page()
+    if not page_id: return
+    
+    try:
+        # Convert data to JSON string
+        json_content = json.dumps(data_dict, indent=2)
+        
+        # Find the existing code block to update
+        children = notion.blocks.children.list(block_id=page_id).get("results", [])
+        code_block_id = None
+        for block in children:
+            if block["type"] == "code":
+                code_block_id = block["id"]
+                break
+        
+        if code_block_id:
+            # Update existing block
+            notion.blocks.update(
+                block_id=code_block_id,
+                code={
+                    "rich_text": [{"type": "text", "text": {"content": json_content}}],
+                    "language": "json"
+                }
+            )
+        else:
+            # Create new if missing (shouldn't happen if setup worked)
+            notion.blocks.children.append(
+                block_id=page_id,
+                children=[{
+                    "object": "block",
+                    "type": "code",
+                    "code": {
+                        "rich_text": [{"type": "text", "text": {"content": json_content}}],
+                        "language": "json"
+                    }
+                }]
+            )
+            
+    except Exception as e:
+        print(f"Error saving user data: {e}")
+
+def load_user_data_from_notion():
+    """Load user data from the System Page code block"""
+    page_id = get_or_create_system_page()
+    if not page_id: return {}
+    
+    try:
+        children = notion.blocks.children.list(block_id=page_id).get("results", [])
+        for block in children:
+            if block["type"] == "code":
+                content = block["code"]["rich_text"][0]["text"]["content"]
+                return json.loads(content)
+        return {}
+    except Exception as e:
+        print(f"Error loading user data: {e}")
+        return {}
