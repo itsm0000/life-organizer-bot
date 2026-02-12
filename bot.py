@@ -167,7 +167,32 @@ XP_TASK_COMPLETED = 15
 XP_VOICE_NOTE = 3
 XP_FOCUS_COMPLETED = 25
 
-# ... (Levels logic unchanged) ...
+
+def get_level(xp):
+    """Calculate level and title based on XP"""
+    thresholds = [
+        (0, "Seedling 🌱"),
+        (50, "Sprout 🌿"),
+        (150, "Sapling 🌲"),
+        (350, "Young Tree 🌳"),
+        (600, "Mature Tree 🌳"),
+        (1000, "Ancient Oak 🌳"),
+        (2000, "Forest Spirit 🧚"),
+        (5000, "Master of Life 👑")
+    ]
+    
+    current_level = 1
+    title = thresholds[0][1]
+    
+    for i, (req_xp, req_title) in enumerate(thresholds):
+        if xp >= req_xp:
+            current_level = i + 1
+            title = req_title
+        else:
+            break
+            
+    return current_level, title
+
 
 def add_xp(user_id: int, amount: int, reason: str = "") -> dict:
     """Add XP and update streak. Returns updated stats."""
