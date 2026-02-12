@@ -112,8 +112,6 @@ def secure(func):
 from datetime import datetime, timedelta
 
 from notion_integration import (
-    add_to_life_areas, add_to_brain_dump, get_active_items, 
-    mark_item_complete, get_completed_today, get_upcoming_deadlines,
     save_user_data_to_notion, load_user_data_from_notion
 )
 
