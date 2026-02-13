@@ -1925,6 +1925,15 @@ def build_app():
                     "tasksToday": tasks_total,
                     "tasksCompleted": tasks_done,
                     "deadlines": get_upcoming_deadlines(3),
+                    "high_priority": [
+                        {
+                            "id": item.get("id"),
+                            "title": item.get("properties", {}).get("Name", {}).get("title", [{}])[0].get("text", {}).get("content", "Untitled"),
+                            "category": item.get("properties", {}).get("Category", {}).get("select", {}).get("name", "Task")
+                        }
+                        for item in (get_active_items() or [])
+                        if item.get("properties", {}).get("Priority", {}).get("select", {}).get("name") == "High"
+                    ][:3],
                     "completed_today": get_completed_today()
                 }
                 
