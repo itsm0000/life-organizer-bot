@@ -129,7 +129,11 @@ async def parse_management_intent(message_text: str) -> dict:
 HABIT_PROMPT = """You are an AI assistant. Determine if the user is trying to:
 1. CREATE a recurring habit/routine (e.g., "add a skincare habit twice daily")
 2. COMPLETE/CHECK-OFF a habit they already have (e.g., "skincare done", "finished workout")
-3. NEITHER - just a regular message or task
+3. NEITHER - just a regular message or non-recurring task
+
+CRITICAL RULES:
+- If the user mentions a specific ONE-TIME date/time (e.g., "tomorrow at 8am", "deadline next Friday", "exam on Monday"), it is a TASK, NOT a habit. Respond with "none".
+- Only return "create_habit" if the user implies REPETITION (e.g., "daily", "every week") or explicitly says "habit" or "routine".
 
 HABIT CREATE phrases include: "add a habit", "create routine", "daily habit", "recurring task", "twice a day", "every morning", etc.
 HABIT COMPLETE phrases include: "done", "finished", "completed", "checked off", "[habit name] done", etc.
