@@ -1776,6 +1776,8 @@ def build_app():
                         widget_type = "deadline"
                     elif "widget=summary" in raw_query or "widget%3Dsummary" in raw_query:
                         widget_type = "summary"
+                    elif "widget=priority" in raw_query or "widget%3Dpriority" in raw_query:
+                        widget_type = "priority"
                         
                     logger.info(f"***** KWGT RESOLVED WIDGET TYPE to: {widget_type} *****")
                     
@@ -1856,6 +1858,34 @@ def build_app():
                             f"[s=25]{list_text}[/s]"
                         )
                         return Response(rich_text, media_type="text/plain", headers=headers)
+                    
+                    elif widget_type == "priority":
+                        # High Priority Task Widget
+                        # Get top high priority task
+                        active_items = get_active_items() or []
+                        high_priority = [
+                            item for item in active_items
+                            if item.get("properties", {}).get("Priority", {}).get("select", {}).get("name") == "High"
+                        ]
+                        
+                        if high_priority:
+                            task = high_priority[0]
+                            title = task.get("properties", {}).get("Name", {}).get("title", [{}])[0].get("text", {}).get("content", "Untitled")
+                            category = task.get("properties", {}).get("Category", {}).get("select", {}).get("name", "Task")
+                            
+                            rich_text = (
+                                f"[c=#FF4500][s=40][b]⚠ HIGH PRIORITY[/b][/s][/c]\n"
+                                f"[s=30]{title}[/s]\n"
+                                f"[c=#AAAAAA][s=20]{category}[/s][/c]"
+                            )
+                        else:
+                            rich_text = (
+                                "[c=#10B981][s=40][b]ALL GOOD[/b][/s][/c]\n"
+                                "[s=30]No high priority tasks[/s]\n"
+                                "[c=#AAAAAA][s=20]Chill mode active ☕[/s][/c]"
+                            )
+                        return Response(rich_text, media_type="text/plain", headers=headers)
+
                     
                     else:
                         # Default: Streak Flame
